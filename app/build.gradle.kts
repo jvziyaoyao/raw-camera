@@ -50,9 +50,18 @@ android {
 }
 
 dependencies {
+    implementation("org.opencv:opencv:4.9.0")
+
+    val accompanist_version = "0.24.1-alpha"
+    implementation("com.google.accompanist:accompanist-systemuicontroller:$accompanist_version")
+    implementation("com.google.accompanist:accompanist-insets:$accompanist_version")
+    implementation("com.google.accompanist:accompanist-permissions:$accompanist_version")
+    implementation("com.google.accompanist:accompanist-drawablepainter:$accompanist_version")
+    implementation("com.google.accompanist:accompanist-webview:$accompanist_version")
 
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
     implementation("androidx.activity:activity-compose:1.8.2")
     implementation(platform("androidx.compose:compose-bom:2023.08.00"))
     implementation("androidx.compose.ui:ui")
