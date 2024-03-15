@@ -345,13 +345,17 @@ class Camera2Activity : ComponentActivity(), CoroutineScope by MainScope() {
 
         // 填充峰值亮度数据
         launch(Dispatchers.IO) {
+            val zebraOffsetArr = arrayOf(0).toIntArray()
             combine(grayMatFlow, mViewModel.brightnessPeakingEnableFlow) { t01, t02 ->
                 arrayOf(t01, t02)
             }.collectLatest {
                 val grayMat = grayMatFlow.value
                 val enable = mViewModel.brightnessPeakingEnableFlow.value
                 brightnessPeakingMatFlow.value =
-                    if (grayMat != null && enable) markOverExposedRegions(grayMat) else null
+                    if (grayMat != null && enable) markOverExposedRegions(
+                        zebraOffsetArr,
+                        grayMat
+                    ) else null
             }
         }
 
@@ -395,73 +399,6 @@ class Camera2Activity : ComponentActivity(), CoroutineScope by MainScope() {
                     } else brightnessPeakingMat ?: focusPeakingMat
             }
         }
-    }
-
-    private var zebraOffset = 0
-
-    private fun markOverExposedRegions(grayMat: Mat): Mat {
-        // 将图像转换为灰度图
-        val thresholdMat = Mat.zeros(grayMat.size(), CvType.CV_8UC1)
-        Imgproc.threshold(grayMat, thresholdMat, 250.0, 255.0, Imgproc.THRESH_BINARY)
-        // 创建斑马纹图案
-        val zebraPattern = createZebraPattern(thresholdMat.size())
-        // 找到白色部分并替换为斑马纹
-        zebraPattern.copyTo(thresholdMat, thresholdMat)
-        return thresholdMat
-    }
-
-    private fun createZebraPattern(size: org.opencv.core.Size): Mat {
-        val zebraPattern = Mat.zeros(size, CvType.CV_8UC4)
-        val stripeWidth = 8
-        val stripeStep = stripeWidth * 3
-        val stripeScalar = Scalar(0.0, 255.0, 255.0, 255.0)
-        for (x in zebraOffset until zebraPattern.cols() step stripeStep) {
-            val p1 = Point(x.toDouble(), 0.0)
-            val p2 = Point(0.0, x.toDouble())
-            Imgproc.line(zebraPattern, p1, p2, stripeScalar, stripeWidth, Imgproc.LINE_AA, 0)
-        }
-        for (y in zebraPattern.cols() + zebraOffset until zebraPattern.rows() step stripeStep) {
-            val p1 = Point(0.0, y.toDouble())
-            val p2 = Point(y.toDouble(), 0.0)
-            Imgproc.line(zebraPattern, p1, p2, stripeScalar, stripeWidth, Imgproc.LINE_AA, 0)
-        }
-        for (x in zebraOffset until zebraPattern.cols() step stripeStep) {
-            val p1 = Point(x.toDouble(), zebraPattern.rows().toDouble())
-            val y2 = zebraPattern.rows() - zebraPattern.cols() + x.toDouble()
-            val p2 = Point(zebraPattern.cols().toDouble(), y2)
-            Imgproc.line(zebraPattern, p1, p2, stripeScalar, stripeWidth, Imgproc.LINE_AA, 0)
-        }
-        zebraOffset += 1
-        if (zebraOffset > stripeStep) zebraOffset = 0
-        return zebraPattern
-    }
-
-    private fun markShapeImageRegions(grayMat: Mat): Mat {
-        // Compute gradient magnitude
-        val gradX = Mat()
-        val gradY = Mat()
-        // Calculate gradient X
-        Imgproc.Sobel(grayMat, gradX, CvType.CV_64F, 1, 0)
-        Core.convertScaleAbs(gradX, gradX)
-        // Calculate gradient Y
-        Imgproc.Sobel(grayMat, gradY, CvType.CV_64F, 0, 1)
-        Core.convertScaleAbs(gradY, gradY)
-        // Combine the gradient images
-        val gradientNorm = Mat()
-        Core.addWeighted(gradX, 0.5, gradY, 0.5, 0.0, gradientNorm)
-        Core.normalize(gradientNorm, gradientNorm, 0.0, 255.0, Core.NORM_MINMAX, CvType.CV_8UC1)
-        Imgproc.threshold(gradientNorm, gradientNorm, 100.0, 255.0, Imgproc.THRESH_TOZERO)
-
-        val alphaMat = Mat(gradientNorm.size(), CvType.CV_8UC4)
-        val solidMat = Mat.zeros(gradientNorm.size(), CvType.CV_8UC3)
-        val solidScalar = Scalar(0.0, 255.0, 0.0)
-        solidMat.setTo(solidScalar)
-        Core.merge(listOf(solidMat, gradientNorm), alphaMat)
-
-        gradX.release()
-        gradY.release()
-        gradientNorm.release()
-        return alphaMat
     }
 
     override fun onResume() {
