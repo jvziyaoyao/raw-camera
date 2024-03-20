@@ -258,15 +258,19 @@ class Camera2ViewModel : ViewModel() {
 
     val exposureHistogramEnableFlow = MutableStateFlow(false)
 
-    val focusPointFlow = MutableStateFlow<Pair<Float, Float>?>(null)
+    val focusPointRectFlow = MutableStateFlow<androidx.compose.ui.geometry.Rect?>(null)
 
-    val focusPointSize = mutableStateOf(Size(100, 100))
+    val previewAFState = mutableStateOf<Int?>(null)
 
-    val focusState = mutableStateOf<Int?>(null)
+    val previewAEState = mutableStateOf<Int?>(null)
+
+    val previewAWBState = mutableStateOf<Int?>(null)
 
     val previewAFRegions = mutableStateOf<List<MeteringRectangle>?>(null)
 
     val previewAERegions = mutableStateOf<List<MeteringRectangle>?>(null)
+
+    val previewAWBRegions = mutableStateOf<List<MeteringRectangle>?>(null)
 
     val availableFaceDetectModes = mutableStateListOf<FaceDetectMode>()
 
@@ -449,7 +453,7 @@ class Camera2ViewModel : ViewModel() {
             oisEnableFlow,
             currentSceneModeFlow,
             zoomRatioFlow,
-            focusPointFlow,
+            focusPointRectFlow,
             currentFaceDetectModeFlow,
         )
     ) { list -> list }
@@ -576,17 +580,16 @@ class Camera2ViewModel : ViewModel() {
                 )
             }
 
-            focusPointFlow.value?.let {
-                val meteringRectangle = calculateMeteringRectangle(
-                    point = it,
-                    pointSize = focusPointSize.value,
+            focusPointRectFlow.value?.let {
+                val rect = composeRect2SensorRect(
+                    rect = it,
                     rotationOrientation = rotationOrientation.value,
                     cameraFacing = cameraFacing.value,
-                    sensorRect = sensorSize.value,
+                    sensorWidth = sensorSize.value.width(),
+                    sensorHeight = sensorSize.value.height(),
                 )
-
-                Log.i(TAG, "onCaptureCompleted setCurrentCaptureParams: $meteringRectangle")
-                currentMeteringRectangle = meteringRectangle
+                val meteringRectangle =
+                    MeteringRectangle(rect, MeteringRectangle.METERING_WEIGHT_MAX)
                 set(CaptureRequest.CONTROL_AF_REGIONS, arrayOf(meteringRectangle))
                 set(CaptureRequest.CONTROL_AE_REGIONS, arrayOf(meteringRectangle))
                 set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO)
@@ -598,47 +601,6 @@ class Camera2ViewModel : ViewModel() {
             }
 
         }
-    }
-
-    var currentMeteringRectangle: MeteringRectangle? = null
-
-    private fun calculateMeteringRectangle(
-        point: Pair<Float, Float>,
-        pointSize: Size,
-        rotationOrientation: Int,
-        cameraFacing: Int,
-        sensorRect: Rect,
-    ): MeteringRectangle {
-        val rotationPoint = calculateOrientationOffsetToSensor(point, rotationOrientation, cameraFacing)
-        val x = rotationPoint.first
-        val y = rotationPoint.second
-        // 定义对焦矩形的大小
-        val rectangleWidth = pointSize.width.toFloat()
-        val rectangleHeight = pointSize.height.toFloat()
-
-        val width = sensorRect.width()
-        val height = sensorRect.height()
-        // 计算相对于传感器尺寸的坐标
-        val sensorX = x * width
-        val sensorY = y * height
-
-        // 计算对焦矩形的左上角坐标
-//        var rectangleLeft = sensorX - rectangleWidth / 2
-//        var rectangleTop = sensorY - rectangleHeight / 2
-
-        var rectangleLeft = sensorX
-        var rectangleTop = sensorY
-        // 确保对焦矩形不会超出传感器范围
-        rectangleLeft = 0f.coerceAtLeast(rectangleLeft.coerceAtMost(width - rectangleWidth))
-        rectangleTop = 0f.coerceAtLeast(rectangleTop.coerceAtMost(height - rectangleHeight))
-        // 创建MeteringRectangle对象
-        val rect = Rect(
-            rectangleLeft.toInt(),
-            rectangleTop.toInt(),
-            (rectangleLeft + rectangleWidth).toInt(),
-            (rectangleTop + rectangleHeight).toInt()
-        )
-        return MeteringRectangle(rect, MeteringRectangle.METERING_WEIGHT_MAX)
     }
 
 }

@@ -22,7 +22,6 @@ import android.os.Environment
 import android.os.Handler
 import android.os.HandlerThread
 import android.util.Log
-import android.util.Size
 import android.view.Surface
 import android.view.ViewGroup
 import android.widget.FrameLayout
@@ -33,7 +32,6 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -65,8 +63,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -470,18 +470,34 @@ class Camera2Activity : ComponentActivity(), CoroutineScope by MainScope() {
                     mViewModel.previewOisEnable.value =
                         it == CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON
                 }
+
             result.get(CaptureResult.CONTROL_AF_STATE)
                 ?.let {
-                    mViewModel.focusState.value = it
-                }
-            result.get(CaptureResult.CONTROL_AE_REGIONS)
-                ?.let {
-                    mViewModel.previewAERegions.value = it.toList()
+                    mViewModel.previewAFState.value = it
                 }
             result.get(CaptureResult.CONTROL_AF_REGIONS)
                 ?.let {
                     mViewModel.previewAFRegions.value = it.toList()
                 }
+
+            result.get(CaptureResult.CONTROL_AE_STATE)
+                ?.let {
+                    mViewModel.previewAEState.value = it
+                }
+            result.get(CaptureResult.CONTROL_AE_REGIONS)
+                ?.let {
+                    mViewModel.previewAERegions.value = it.toList()
+                }
+
+            result.get(CaptureResult.CONTROL_AWB_STATE)
+                ?.let {
+                    mViewModel.previewAWBState.value = it
+                }
+            result.get(CaptureResult.CONTROL_AWB_REGIONS)
+                ?.let {
+                    mViewModel.previewAWBRegions.value = it.toList()
+                }
+
             result.get(CaptureResult.STATISTICS_FACES)
                 ?.let {
                     mViewModel.previewFaceDetectResult.clear()
@@ -829,141 +845,125 @@ fun Camera2PreviewLayer(
             )
 
             val previewSize = remember { mutableStateOf(IntSize.Zero) }
+            val fingerClick = remember { mutableStateOf(Offset.Zero) }
+            val fingerRect = remember { mutableStateOf(Rect.Zero) }
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .pointerInput(Unit) {
                         detectTapGestures {
-                            val x = it.x.div(previewSize.value.width)
-                            val y = it.y.div(previewSize.value.height)
-                            viewModel.focusPointFlow.value = Pair(x, y)
+                            fingerClick.value = it
+                            val previewWidth = previewSize.value.width.toFloat()
+                            val previewHeight = previewSize.value.height.toFloat()
+                            val fingerSize = 100F
+                            val rect = getFingerPointRect(
+                                it.x,
+                                it.y,
+                                previewWidth,
+                                previewHeight,
+                                fingerSize
+                            )
+                            fingerRect.value = rect
+                            val normalizedRect = rectNormalized(rect, previewWidth, previewHeight)
+                            viewModel.focusPointRectFlow.value = normalizedRect
                         }
                     }
                     .onSizeChanged {
                         previewSize.value = it
                     }
             ) {
-                val focusState = viewModel.focusState
-                val focusPointSize = viewModel.focusPointSize
-                val focusPoint = viewModel.focusPointFlow.collectAsState()
+                val focusPointRect = viewModel.focusPointRectFlow.collectAsState()
+                val previewAFState = viewModel.previewAFState
+                val previewAEState = viewModel.previewAEState
                 val previewAFRegions = viewModel.previewAFRegions
                 val previewAERegions = viewModel.previewAERegions
                 val sensorSize = viewModel.sensorSize
                 val sensorWidth = sensorSize.value.width()
                 val sensorHeight = sensorSize.value.height()
-                focusState.value?.let { afState ->
-                    Box(
-                        modifier = Modifier
-                            .graphicsLayer {
-                                focusPoint.value?.apply {
-                                    translationX = first.times(previewSize.value.width)
-                                    translationY = second.times(previewSize.value.height)
-                                }
-                            }
-                            .run {
-                                density.run {
-                                    size(
-                                        width = focusPointSize.value.width.toDp(),
-                                        height = focusPointSize.value.height.toDp(),
-                                    )
-                                }
-                            }
-                            .border(
-                                width = 2.dp,
-                                color = when (afState) {
-                                    CameraMetadata.CONTROL_AF_STATE_ACTIVE_SCAN -> Color.White
-                                    CameraMetadata.CONTROL_AF_STATE_FOCUSED_LOCKED -> Color.Green
-                                    else -> Color.Gray
-                                }
-                            )
-                    )
-                }
-
-                @Composable
-                fun drawRegion(
-                    point: Pair<Float, Float>,
-                    color: Color,
-                    size: Size,
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .graphicsLayer {
-                                point.apply {
-                                    translationX = first.times(previewSize.value.width)
-                                    translationY = second.times(previewSize.value.height)
-                                }
-                            }
-                            .run {
-                                density.run {
-                                    size(
-                                        width = size.width.toDp(),
-                                        height = size.height.toDp(),
-                                    )
-                                }
-                            }
-                            .border(
-                                width = 2.dp,
-                                color = color,
-                            )
-                    )
-                }
-                previewAFRegions.value?.forEach { meteringRectangle ->
-                    val meteringX = meteringRectangle.x.toFloat().div(sensorWidth)
-                    val meteringY = meteringRectangle.y.toFloat().div(sensorHeight)
-                    val point = calculateOrientationOffsetFromSensor(
-                        point = Pair(meteringX, meteringY),
-                        orientation = viewModel.rotationOrientation.value,
-                        cameraFacing = viewModel.cameraFacing.value,
-                    )
-                    drawRegion(point = point, color = Color.Blue, size = focusPointSize.value)
-                }
-
-                previewAERegions.value?.forEach { meteringRectangle ->
-                    val meteringX = meteringRectangle.x.toFloat().div(sensorWidth)
-                    val meteringY = meteringRectangle.y.toFloat().div(sensorHeight)
-                    val point = calculateOrientationOffsetFromSensor(
-                        point = Pair(meteringX, meteringY),
-                        orientation = viewModel.rotationOrientation.value,
-                        cameraFacing = viewModel.cameraFacing.value,
-                    )
-                    drawRegion(point = point, color = Color.Yellow, size = focusPointSize.value)
-                }
-
-
                 Canvas(modifier = Modifier.fillMaxSize()) {
+                    focusPointRect.value?.let { fPointRect ->
+                        val pointRect = rectFromNormalized(fPointRect, size.width, size.height)
+                        drawRect(
+                            color = Color.White,
+                            topLeft = pointRect.topLeft,
+                            size = pointRect.size,
+                            style = Stroke(width = 10F)
+                        )
+                    }
+
+                    previewAFRegions.value?.forEach { meteringRectangle ->
+                        val rect = sensorDetectRect2ComposeRect(
+                            rect = meteringRectangle.rect,
+                            rotationOrientation = viewModel.rotationOrientation.value,
+                            cameraFacing = viewModel.cameraFacing.value,
+                            size = size,
+                            sensorWidth = sensorWidth,
+                            sensorHeight = sensorHeight,
+                        )
+                        drawRect(
+                            color = Color.Red,
+                            topLeft = rect.topLeft,
+                            size = rect.size,
+                            style = Stroke(width = 4F)
+                        )
+                        val circleSize = 16F
+                        drawCircle(
+                            color = when (previewAFState.value) {
+                                CameraMetadata.CONTROL_AF_STATE_ACTIVE_SCAN -> Color.White
+                                CameraMetadata.CONTROL_AF_STATE_FOCUSED_LOCKED -> Color.Green
+                                else -> Color.Gray
+                            },
+                            radius = circleSize,
+                            center = Offset(
+                                x = rect.right + circleSize,
+                                y = rect.top,
+                            ),
+                        )
+                    }
+                    previewAERegions.value?.forEach { meteringRectangle ->
+                        val rect = sensorDetectRect2ComposeRect(
+                            rect = meteringRectangle.rect,
+                            rotationOrientation = viewModel.rotationOrientation.value,
+                            cameraFacing = viewModel.cameraFacing.value,
+                            size = size,
+                            sensorWidth = sensorWidth,
+                            sensorHeight = sensorHeight,
+                        )
+                        drawRect(
+                            color = Color.Red,
+                            topLeft = rect.topLeft,
+                            size = rect.size,
+                            style = Stroke(width = 4F)
+                        )
+                        val circleSize = 16F
+                        Log.i("TAG", "Camera2PreviewLayer: previewAEState ${previewAEState.value}")
+                        drawCircle(
+                            color = when (previewAEState.value) {
+                                CameraMetadata.CONTROL_AE_STATE_PRECAPTURE -> Color.White
+                                CameraMetadata.CONTROL_AE_STATE_CONVERGED -> Color.Green
+                                else -> Color.Gray
+                            },
+                            radius = circleSize,
+                            center = Offset(
+                                x = rect.right + circleSize,
+                                y = rect.bottom,
+                            ),
+                        )
+                    }
                     viewModel.previewFaceDetectResult.forEach {
-                        val rectLeft = it.bounds.left.toFloat().div(sensorWidth)
-                        val rectTop = it.bounds.top.toFloat().div(sensorHeight)
-                        val rectRight = it.bounds.right.toFloat().div(sensorWidth)
-                        val rectBottom = it.bounds.bottom.toFloat().div(sensorHeight)
-                        val point01 = calculateOrientationOffsetFromSensor(
-                            point = Pair(rectLeft, rectTop),
-                            orientation = viewModel.rotationOrientation.value,
+                        val faceRect = sensorDetectRect2ComposeRect(
+                            rect = it.bounds,
+                            rotationOrientation = viewModel.rotationOrientation.value,
                             cameraFacing = viewModel.cameraFacing.value,
+                            size = size,
+                            sensorWidth = sensorWidth,
+                            sensorHeight = sensorHeight,
                         )
-                        val point02 = calculateOrientationOffsetFromSensor(
-                            point = Pair(rectRight, rectBottom),
-                            orientation = viewModel.rotationOrientation.value,
-                            cameraFacing = viewModel.cameraFacing.value,
-                        )
-
-                        val left = if (rectLeft < rectRight) rectLeft else rectRight
-                        val right = if (rectRight > rectLeft) rectRight else rectLeft
-                        val top = if (rectTop < rectBottom) rectTop else rectBottom
-                        val bottom = if (rectBottom > rectTop) rectBottom else rectTop
-                        val finalRect = androidx.compose.ui.geometry.Rect(left, top, right, bottom)
-
-                        Log.i("TAG", "Camera2PreviewLayer: ${it.bounds} - $point01 - $point02")
                         drawRect(
                             color = Color.Cyan,
-                            topLeft = Offset(
-                                x = finalRect.left.times(size.width),
-                                y = finalRect.top.times(size.height),
-                            ),
-                            size = androidx.compose.ui.geometry.Size(
-                                width = finalRect.width.times(size.width),
-                                height = finalRect.height.times(size.height),
-                            ),
+                            topLeft = faceRect.topLeft,
+                            size = faceRect.size,
+                            style = Stroke(width = 10F)
                         )
                     }
                 }

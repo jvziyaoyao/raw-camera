@@ -22,6 +22,7 @@ import android.util.Size
 import android.view.PixelCopy
 import android.view.Surface
 import android.view.SurfaceView
+import androidx.compose.ui.geometry.Rect
 import java.util.concurrent.Executors
 import java.util.stream.Collectors
 import kotlin.coroutines.resume
@@ -235,15 +236,15 @@ fun calculateOrientationOffsetToSensor(
     val y = point.second
     return if (cameraFacing == CameraMetadata.LENS_FACING_FRONT) {
         when (orientation) {
-            90 -> Pair(1 - y, x)
-            180 -> point
-            270 -> Pair(y, 1 - x)
-            else -> Pair(y, x)
+            90 -> Pair(1 - y, 1 - x)
+            180 -> Pair(x, 1 - y)
+            270 -> Pair(y, x)
+            else -> Pair(1 - x, y)
         }
     } else {
         when (orientation) {
             90 -> Pair(y, 1 - x)
-            180 -> Pair(y, x)
+            180 -> Pair(1 - x, 1 - y)
             270 -> Pair(1 - y, x)
             else -> point
         }
@@ -259,17 +260,134 @@ fun calculateOrientationOffsetFromSensor(
     val y = point.second
     return if (cameraFacing == CameraMetadata.LENS_FACING_FRONT) {
         when (orientation) {
-            90 -> Pair(y, 1 - x)
-            180 -> point
-            270 -> Pair(1 - y, x)
-            else -> Pair(y, x)
+            90 -> Pair(1 - y, 1 - x)
+            180 -> Pair(x, 1 - y)
+            270 -> Pair(y, x)
+            else -> Pair(1 - x, y)
         }
     } else {
         when (orientation) {
-            90 -> Pair(1 - y,  x)
-            180 -> Pair(y, x)
+            90 -> Pair(1 - y, x)
+            180 -> Pair(1 - x, 1 - y)
             270 -> Pair(y, 1 - x)
             else -> point
         }
     }
+}
+
+fun getFingerPointRect(
+    x: Float,
+    y: Float,
+    containerWidth: Float,
+    containerHeight: Float,
+    fingerSize: Float,
+): Rect {
+    val halfSize = fingerSize.div(2)
+    var left = x - halfSize
+    var top = y - halfSize
+    if (left < 0) left = 0F
+    if (top < 0) top = 0F
+    var right = left + fingerSize
+    var bottom = top + fingerSize
+    if (right > containerWidth) {
+        right = containerWidth
+        val preLeft = right - fingerSize
+        if (preLeft >= 0) left = preLeft
+    }
+    if (bottom > containerHeight) {
+        bottom = containerHeight
+        val preTop = bottom - fingerSize
+        if (preTop >= 0) top = preTop
+    }
+    return Rect(
+        left, top, right, bottom,
+    )
+}
+
+fun rectNormalized(
+    rect: Rect,
+    previewWidth: Float,
+    previewHeight: Float,
+): Rect {
+    return Rect(
+        rect.left.div(previewWidth),
+        rect.top.div(previewHeight),
+        rect.right.div(previewWidth),
+        rect.bottom.div(previewHeight)
+    )
+}
+
+fun rectFromNormalized(
+    rect: Rect,
+    previewWidth: Float,
+    previewHeight: Float,
+): Rect {
+    return Rect(
+        rect.left.times(previewWidth),
+        rect.top.times(previewHeight),
+        rect.right.times(previewWidth),
+        rect.bottom.times(previewHeight),
+    )
+}
+
+fun composeRect2SensorRect(
+    rect: Rect,
+    rotationOrientation: Int,
+    cameraFacing: Int,
+    sensorWidth: Int,
+    sensorHeight: Int,
+): android.graphics.Rect {
+    val point01 = calculateOrientationOffsetToSensor(
+        point = Pair(rect.left, rect.top),
+        orientation = rotationOrientation,
+        cameraFacing = cameraFacing,
+    )
+    val point02 = calculateOrientationOffsetToSensor(
+        point = Pair(rect.right, rect.bottom),
+        orientation = rotationOrientation,
+        cameraFacing = cameraFacing,
+    )
+    val l01 = point01.first.times(sensorWidth).toInt()
+    val l02 = point02.first.times(sensorWidth).toInt()
+    val t01 = point01.second.times(sensorHeight).toInt()
+    val t02 = point02.second.times(sensorHeight).toInt()
+    val left = if (l01 < l02) l01 else l02
+    val right = if (l01 > l02) l01 else l02
+    val top = if (t01 < t02) t01 else t02
+    val bottom = if (t01 > t02) t01 else t02
+    return android.graphics.Rect(left, top, right, bottom)
+}
+
+fun sensorDetectRect2ComposeRect(
+    rect: android.graphics.Rect,
+    rotationOrientation: Int,
+    cameraFacing: Int,
+    size: androidx.compose.ui.geometry.Size,
+    sensorWidth: Int,
+    sensorHeight: Int,
+): Rect {
+    val rectLeft = rect.left.toFloat().div(sensorWidth)
+    val rectTop = rect.top.toFloat().div(sensorHeight)
+    val rectRight = rect.right.toFloat().div(sensorWidth)
+    val rectBottom = rect.bottom.toFloat().div(sensorHeight)
+    val point01 = calculateOrientationOffsetFromSensor(
+        point = Pair(rectLeft, rectTop),
+        orientation = rotationOrientation,
+        cameraFacing = cameraFacing,
+    )
+    val point02 = calculateOrientationOffsetFromSensor(
+        point = Pair(rectRight, rectBottom),
+        orientation = rotationOrientation,
+        cameraFacing = cameraFacing,
+    )
+
+    val l01 = point01.first.times(size.width)
+    val l02 = point02.first.times(size.width)
+    val t01 = point01.second.times(size.height)
+    val t02 = point02.second.times(size.height)
+    val left = if (l01 < l02) l01 else l02
+    val right = if (l01 > l02) l01 else l02
+    val top = if (t01 < t02) t01 else t02
+    val bottom = if (t01 > t02) t01 else t02
+    return Rect(left, top, right, bottom)
 }
