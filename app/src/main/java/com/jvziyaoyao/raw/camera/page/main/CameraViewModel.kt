@@ -256,7 +256,7 @@ class Camera2ViewModel : ViewModel() {
 
     val brightnessPeakingEnableFlow = MutableStateFlow(false)
 
-    val exposureHistogramEnableFlow = MutableStateFlow(false)
+    val exposureHistogramEnableFlow = MutableStateFlow(true)
 
     val focusPointRectFlow = MutableStateFlow<androidx.compose.ui.geometry.Rect?>(null)
 
@@ -580,6 +580,7 @@ class Camera2ViewModel : ViewModel() {
                 )
             }
 
+            // TODO 合焦后要更改为连续对焦，否则会一直对焦
             focusPointRectFlow.value?.let {
                 val rect = composeRect2SensorRect(
                     rect = it,
