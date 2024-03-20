@@ -33,6 +33,8 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -57,7 +59,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,8 +68,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -89,9 +94,6 @@ import org.opencv.android.OpenCVLoader
 import org.opencv.core.Core
 import org.opencv.core.CvType
 import org.opencv.core.Mat
-import org.opencv.core.Point
-import org.opencv.core.Scalar
-import org.opencv.imgproc.Imgproc
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
@@ -246,6 +248,7 @@ class Camera2Activity : ComponentActivity(), CoroutineScope by MainScope() {
                 val cameraPair = mViewModel.currentCameraPairFlow.value
                 val currentOutputItem = mViewModel.currentOutputItemFlow.value
                 val cameraCharacteristics = cameraPair?.second
+                val imageAspectRatio = mViewModel.imageAspectRatio
                 if (
                     cameraDevice != null
                     && cameraCharacteristics != null
@@ -254,6 +257,7 @@ class Camera2Activity : ComponentActivity(), CoroutineScope by MainScope() {
                         cameraDevice,
                         cameraCharacteristics,
                         currentOutputItem,
+                        imageAspectRatio,
                     )
                 }
             }
@@ -458,31 +462,40 @@ class Camera2Activity : ComponentActivity(), CoroutineScope by MainScope() {
                     ?.let { mViewModel.previewZoomRatio.value = it }
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                request.get(CaptureRequest.CONTROL_SCENE_MODE)
+                result.get(CaptureResult.CONTROL_SCENE_MODE)
                     ?.let { mViewModel.previewSceneMode.value = SceneMode.getByCode(it) }
             }
-            request.get(CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE)
+            result.get(CaptureResult.LENS_OPTICAL_STABILIZATION_MODE)
                 ?.let {
                     mViewModel.previewOisEnable.value =
                         it == CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON
                 }
-
-//            result.get(CaptureResult.CONTROL_AF_REGIONS)?.let {
-//                it.forEach { region ->
-//                    Log.i(TAG, "onCaptureCompleted: af regions ${region.rect}")
-//                }
-//            }
-//            val afState = result.get(CaptureResult.CONTROL_AF_STATE)
-//            Log.i(TAG, "onCaptureCompleted: afState $afState")
-
-//            CaptureResult.CONTROL_AF_STATE_FOCUSED_LOCKED
+            result.get(CaptureResult.CONTROL_AF_STATE)
+                ?.let {
+                    mViewModel.focusState.value = it
+                }
+            result.get(CaptureResult.CONTROL_AE_REGIONS)
+                ?.let {
+                    mViewModel.previewAERegions.value = it.toList()
+                }
+            result.get(CaptureResult.CONTROL_AF_REGIONS)
+                ?.let {
+                    mViewModel.previewAFRegions.value = it.toList()
+                }
+            result.get(CaptureResult.STATISTICS_FACES)
+                ?.let {
+                    mViewModel.previewFaceDetectResult.clear()
+                    mViewModel.previewFaceDetectResult.addAll(it.toList())
+                }
         }
     }
 
     private fun setOrientation(cameraCharacteristics: CameraCharacteristics) {
         // 设置预览方向相关
-        cameraCharacteristics.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE)?.apply {
-            val cameraFacing = cameraCharacteristics.get(CameraCharacteristics.LENS_FACING)
+        val sensorSize =
+            cameraCharacteristics.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE)
+        val cameraFacing = cameraCharacteristics.get(CameraCharacteristics.LENS_FACING)
+        if (sensorSize != null && cameraFacing != null) {
             val sensorOrientation =
                 cameraCharacteristics.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 90
             val rotationOrientationResult = if (cameraFacing == CameraMetadata.LENS_FACING_FRONT) {
@@ -492,12 +505,10 @@ class Camera2Activity : ComponentActivity(), CoroutineScope by MainScope() {
             } else {
                 (sensorOrientation - displayRotation + 360) % 360
             }
-            mViewModel.sensorSize.value =
-                if (rotationOrientationResult == 90 || rotationOrientationResult == 270) {
-                    Size(height(), width())
-                } else {
-                    Size(width(), height())
-                }
+            mViewModel.cameraFacing.value = cameraFacing
+            mViewModel.sensorSize.value = sensorSize
+            mViewModel.rotationOrientation.value = rotationOrientationResult
+            Log.i(TAG, "setOrientation: rotationOrientationResult $rotationOrientationResult")
             val nextTextureVertex = if (cameraFacing == CameraMetadata.LENS_FACING_FRONT) {
                 when (rotationOrientationResult) {
                     0 -> TEX_VERTEX_MAT_FRONT_0
@@ -523,6 +534,7 @@ class Camera2Activity : ComponentActivity(), CoroutineScope by MainScope() {
         cameraDevice: CameraDevice,
         cameraCharacteristics: CameraCharacteristics,
         outputItem: OutputItem?,
+        imageAspectRatio: Float,
     ) {
         val scaleStreamConfigurationMap =
             cameraCharacteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
@@ -565,7 +577,7 @@ class Camera2Activity : ComponentActivity(), CoroutineScope by MainScope() {
 
         val outputSizeList = scaleStreamConfigurationMap?.getOutputSizes(ImageFormat.YUV_420_888)
         val bestPreviewSize = outputSizeList?.run {
-            val aspectList = getSizeByAspectRatio(this, 4F.div(3F))
+            val aspectList = getSizeByAspectRatio(this, imageAspectRatio)
             return@run findBestSize(aspectList.toTypedArray(), 1280)
         }
         if (bestPreviewSize != null) {
@@ -783,49 +795,28 @@ fun Camera2PreviewLayer(
     onGLSurfaceView: (GLSurfaceView) -> Unit,
 ) {
     val viewModel: Camera2ViewModel = viewModel()
+    val density = LocalDensity.current
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val portrait = maxHeight > maxWidth
         Box(
             modifier = Modifier
                 .run {
-                    if (maxHeight > maxWidth) {
+                    val imageAspectRatio = viewModel.imageAspectRatio
+                    if (portrait) {
                         fillMaxWidth()
-                            .aspectRatio(3F.div(4F))
+                            .aspectRatio(1.div(imageAspectRatio))
                     } else {
                         fillMaxHeight()
-                            .aspectRatio(4F.div(3F))
+                            .aspectRatio(imageAspectRatio)
                     }
                 }
-//                .fillMaxWidth()
-//                .aspectRatio(1F)
                 .background(Color.Cyan.copy(0.2F))
-                .align(Alignment.TopCenter)
-//                .aspectRatio(1F)
-//                .aspectRatio(3F.div(4F))
-//                .aspectRatio(rectHeight.div(rectWidth))
+                .align(if (portrait) Alignment.TopCenter else Alignment.CenterStart),
         ) {
-            val sensorSize = viewModel.sensorSize
-            val sensorRectRatio = remember(sensorSize.value) {
-                derivedStateOf {
-                    val rectWidth = sensorSize.value.width.toFloat()
-                    val rectHeight = sensorSize.value.height.toFloat()
-                    rectWidth.div(rectHeight)
-                }
-            }
-
             AndroidView(
                 modifier = Modifier
-                    .graphicsLayer { clip = true }
-                    .fillMaxWidth()
-                    .aspectRatio(sensorRectRatio.value)
-                    .onSizeChanged {
-//                        Log.i("TAG", "Camera2PreviewLayer: surfaceViewSize ${sensorRectRatio.value} - ${it.width.toFloat().div(it.height.toFloat())} - ${it.width},${it.height}")
-                        viewModel.surfaceViewSizeFlow.value = Size(it.width, it.height)
-                    }
-//                    .fillMaxSize()
-//                    .aspectRatio(sensorRectRatio.value)
-//                    .aspectRatio(3F.div(4F))
-//                    .aspectRatio(1F)
-                    .align(Alignment.TopCenter),
+                    .fillMaxSize()
+                    .graphicsLayer { clip = true },
                 factory = { ctx ->
                     GLSurfaceView(ctx).apply {
                         layoutParams = FrameLayout.LayoutParams(
@@ -834,16 +825,149 @@ fun Camera2PreviewLayer(
                         )
                         onGLSurfaceView(this)
                     }
-
-//                    SurfaceView(ctx).apply {
-//                        layoutParams = FrameLayout.LayoutParams(
-//                            ViewGroup.LayoutParams.MATCH_PARENT,
-//                            ViewGroup.LayoutParams.MATCH_PARENT
-//                        )
-//                        onSurfaceView(this)
-//                    }
                 }
             )
+
+            val previewSize = remember { mutableStateOf(IntSize.Zero) }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectTapGestures {
+                            val x = it.x.div(previewSize.value.width)
+                            val y = it.y.div(previewSize.value.height)
+                            viewModel.focusPointFlow.value = Pair(x, y)
+                        }
+                    }
+                    .onSizeChanged {
+                        previewSize.value = it
+                    }
+            ) {
+                val focusState = viewModel.focusState
+                val focusPointSize = viewModel.focusPointSize
+                val focusPoint = viewModel.focusPointFlow.collectAsState()
+                val previewAFRegions = viewModel.previewAFRegions
+                val previewAERegions = viewModel.previewAERegions
+                val sensorSize = viewModel.sensorSize
+                val sensorWidth = sensorSize.value.width()
+                val sensorHeight = sensorSize.value.height()
+                focusState.value?.let { afState ->
+                    Box(
+                        modifier = Modifier
+                            .graphicsLayer {
+                                focusPoint.value?.apply {
+                                    translationX = first.times(previewSize.value.width)
+                                    translationY = second.times(previewSize.value.height)
+                                }
+                            }
+                            .run {
+                                density.run {
+                                    size(
+                                        width = focusPointSize.value.width.toDp(),
+                                        height = focusPointSize.value.height.toDp(),
+                                    )
+                                }
+                            }
+                            .border(
+                                width = 2.dp,
+                                color = when (afState) {
+                                    CameraMetadata.CONTROL_AF_STATE_ACTIVE_SCAN -> Color.White
+                                    CameraMetadata.CONTROL_AF_STATE_FOCUSED_LOCKED -> Color.Green
+                                    else -> Color.Gray
+                                }
+                            )
+                    )
+                }
+
+                @Composable
+                fun drawRegion(
+                    point: Pair<Float, Float>,
+                    color: Color,
+                    size: Size,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .graphicsLayer {
+                                point.apply {
+                                    translationX = first.times(previewSize.value.width)
+                                    translationY = second.times(previewSize.value.height)
+                                }
+                            }
+                            .run {
+                                density.run {
+                                    size(
+                                        width = size.width.toDp(),
+                                        height = size.height.toDp(),
+                                    )
+                                }
+                            }
+                            .border(
+                                width = 2.dp,
+                                color = color,
+                            )
+                    )
+                }
+                previewAFRegions.value?.forEach { meteringRectangle ->
+                    val meteringX = meteringRectangle.x.toFloat().div(sensorWidth)
+                    val meteringY = meteringRectangle.y.toFloat().div(sensorHeight)
+                    val point = calculateOrientationOffsetFromSensor(
+                        point = Pair(meteringX, meteringY),
+                        orientation = viewModel.rotationOrientation.value,
+                        cameraFacing = viewModel.cameraFacing.value,
+                    )
+                    drawRegion(point = point, color = Color.Blue, size = focusPointSize.value)
+                }
+
+                previewAERegions.value?.forEach { meteringRectangle ->
+                    val meteringX = meteringRectangle.x.toFloat().div(sensorWidth)
+                    val meteringY = meteringRectangle.y.toFloat().div(sensorHeight)
+                    val point = calculateOrientationOffsetFromSensor(
+                        point = Pair(meteringX, meteringY),
+                        orientation = viewModel.rotationOrientation.value,
+                        cameraFacing = viewModel.cameraFacing.value,
+                    )
+                    drawRegion(point = point, color = Color.Yellow, size = focusPointSize.value)
+                }
+
+
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    viewModel.previewFaceDetectResult.forEach {
+                        val rectLeft = it.bounds.left.toFloat().div(sensorWidth)
+                        val rectTop = it.bounds.top.toFloat().div(sensorHeight)
+                        val rectRight = it.bounds.right.toFloat().div(sensorWidth)
+                        val rectBottom = it.bounds.bottom.toFloat().div(sensorHeight)
+                        val point01 = calculateOrientationOffsetFromSensor(
+                            point = Pair(rectLeft, rectTop),
+                            orientation = viewModel.rotationOrientation.value,
+                            cameraFacing = viewModel.cameraFacing.value,
+                        )
+                        val point02 = calculateOrientationOffsetFromSensor(
+                            point = Pair(rectRight, rectBottom),
+                            orientation = viewModel.rotationOrientation.value,
+                            cameraFacing = viewModel.cameraFacing.value,
+                        )
+
+                        val left = if (rectLeft < rectRight) rectLeft else rectRight
+                        val right = if (rectRight > rectLeft) rectRight else rectLeft
+                        val top = if (rectTop < rectBottom) rectTop else rectBottom
+                        val bottom = if (rectBottom > rectTop) rectBottom else rectTop
+                        val finalRect = androidx.compose.ui.geometry.Rect(left, top, right, bottom)
+
+                        Log.i("TAG", "Camera2PreviewLayer: ${it.bounds} - $point01 - $point02")
+                        drawRect(
+                            color = Color.Cyan,
+                            topLeft = Offset(
+                                x = finalRect.left.times(size.width),
+                                y = finalRect.top.times(size.height),
+                            ),
+                            size = androidx.compose.ui.geometry.Size(
+                                width = finalRect.width.times(size.width),
+                                height = finalRect.height.times(size.height),
+                            ),
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -989,7 +1113,7 @@ fun Camera2ActionLayer(
             val captureMode = viewModel.captureModeFlow.collectAsState()
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(text = "拍照模式：")
-                for (mode in CaptureMode.values()) {
+                for (mode in CaptureMode.entries) {
                     Button(enabled = captureMode.value != mode, onClick = {
                         viewModel.captureModeFlow.value = mode
                     }) {
@@ -1058,6 +1182,20 @@ fun Camera2ActionLayer(
                         Button(onClick = { }, enabled = false) {
                             Text(text = "无")
                         }
+                    }
+                }
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(text = "人脸识别：")
+                Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                    val currentFaceDetectMode = viewModel.currentFaceDetectModeFlow.collectAsState()
+                    viewModel.availableFaceDetectModes.forEach { faceDetectMode ->
+                        EnableButton(
+                            enable = currentFaceDetectMode.value == faceDetectMode,
+                            label = faceDetectMode.label,
+                            onClick = { viewModel.currentFaceDetectModeFlow.value = faceDetectMode }
+                        )
                     }
                 }
             }
@@ -1153,7 +1291,7 @@ fun Camera2ActionLayer(
                                 .weight(1F)
                                 .horizontalScroll(rememberScrollState())
                         ) {
-                            for (exposureTime in ExposureTime.values()) {
+                            for (exposureTime in ExposureTime.entries) {
                                 Button(
                                     enabled = exposureTime.time != sensorExposureTime.value,
                                     onClick = {

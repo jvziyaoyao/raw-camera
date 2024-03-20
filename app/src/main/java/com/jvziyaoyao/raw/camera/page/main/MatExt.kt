@@ -1,10 +1,6 @@
 package com.jvziyaoyao.raw.camera.page.main
 
 import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.ImageFormat
-import android.graphics.Paint
-import android.media.Image
 import org.opencv.android.Utils
 import org.opencv.core.Core
 import org.opencv.core.CvType
@@ -14,7 +10,6 @@ import org.opencv.core.MatOfInt
 import org.opencv.core.Point
 import org.opencv.core.Scalar
 import org.opencv.imgproc.Imgproc
-import java.nio.ByteBuffer
 
 /**
  * @program: TestFocusable

@@ -26,30 +26,32 @@
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
 
-<!--    &lt;!&ndash; 蓝牙权限 &ndash;&gt;-->
-<!--    <uses-permission-->
-<!--        android:name="android.permission.BLUETOOTH"-->
-<!--        android:maxSdkVersion="30" />-->
-<!--    <uses-permission-->
-<!--        android:name="android.permission.BLUETOOTH_ADMIN"-->
-<!--        android:maxSdkVersion="30" />-->
-<!--    &lt;!&ndash; 位置权限 &ndash;&gt;-->
-<!--    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />-->
-<!--    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />-->
-<!--    &lt;!&ndash; 安卓12蓝牙权限 &ndash;&gt;-->
-<!--    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />-->
-<!--    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />-->
-<!--    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />-->
-<!--    &lt;!&ndash; 声明应用需要支持BLE &ndash;&gt;-->
-<!--    <uses-feature-->
-<!--        android:name="android.hardware.bluetooth_le"-->
-<!--        android:required="true" />-->
+    <!--    &lt;!&ndash; 蓝牙权限 &ndash;&gt;-->
+    <!--    <uses-permission-->
+    <!--        android:name="android.permission.BLUETOOTH"-->
+    <!--        android:maxSdkVersion="30" />-->
+    <!--    <uses-permission-->
+    <!--        android:name="android.permission.BLUETOOTH_ADMIN"-->
+    <!--        android:maxSdkVersion="30" />-->
+    <!--    &lt;!&ndash; 位置权限 &ndash;&gt;-->
+    <!--    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />-->
+    <!--    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />-->
+    <!--    &lt;!&ndash; 安卓12蓝牙权限 &ndash;&gt;-->
+    <!--    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />-->
+    <!--    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />-->
+    <!--    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />-->
+    <!--    &lt;!&ndash; 声明应用需要支持BLE &ndash;&gt;-->
+    <!--    <uses-feature-->
+    <!--        android:name="android.hardware.bluetooth_le"-->
+    <!--        android:required="true" />-->
 
     <uses-feature
         android:name="android.hardware.camera"
         android:required="false" />
 
-    <uses-feature android:glEsVersion="0x00030000" android:required="true" />
+    <uses-feature
+        android:glEsVersion="0x00030000"
+        android:required="true" />
 
     <application
         android:allowBackup="true"
@@ -64,6 +66,7 @@
         <activity
             android:name=".page.main.Camera2Activity"
             android:exported="true"
+            android:screenOrientation="fullSensor"
             android:theme="@style/Theme.RawCamera">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

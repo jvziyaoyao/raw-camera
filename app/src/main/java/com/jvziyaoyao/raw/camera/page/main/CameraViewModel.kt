@@ -2,10 +2,13 @@ package com.jvziyaoyao.raw.camera.page.main
 
 import android.graphics.Bitmap
 import android.graphics.ImageFormat
+import android.graphics.Rect
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraMetadata
 import android.hardware.camera2.CaptureRequest
 import android.hardware.camera2.CaptureResult
+import android.hardware.camera2.params.Face
+import android.hardware.camera2.params.MeteringRectangle
 import android.hardware.camera2.params.RggbChannelVector
 import android.os.Build
 import android.util.Log
@@ -112,7 +115,7 @@ enum class SceneMode(
 
     companion object {
         fun getByCode(code: Int): SceneMode? {
-            for (value in values()) {
+            for (value in entries) {
                 if (value.code == code) return value
             }
             return null
@@ -129,6 +132,34 @@ enum class CaptureMode() {
     AUTO,
     MANUAL,
     ;
+}
+
+enum class FaceDetectMode(
+    val code: Int,
+    val label: String,
+) {
+    OFF(
+        code = CameraCharacteristics.STATISTICS_FACE_DETECT_MODE_OFF,
+        label = "OFF",
+    ),
+    SIMPLE(
+        code = CameraCharacteristics.STATISTICS_FACE_DETECT_MODE_SIMPLE,
+        label = "SIMPLE",
+    ),
+    FULL(
+        code = CameraCharacteristics.STATISTICS_FACE_DETECT_MODE_FULL,
+        label = "FULL",
+    ),
+    ;
+
+    companion object {
+        fun getByCode(code: Int): FaceDetectMode? {
+            for (value in FaceDetectMode.entries) {
+                if (value.code == code) return value
+            }
+            return null
+        }
+    }
 }
 
 enum class ExposureTime(
@@ -170,7 +201,7 @@ class Camera2ViewModel : ViewModel() {
 
     private val TAG = Camera2ViewModel::class.java.name
 
-    private val imageAspectRatio = 4F.div(3F)
+    val imageAspectRatio = 4F.div(3F)
 
     val resumeTimestampFlow = MutableStateFlow<Long?>(null)
 
@@ -185,9 +216,11 @@ class Camera2ViewModel : ViewModel() {
 
     val captureLoading = mutableStateOf(false)
 
-    val sensorSize = mutableStateOf(Size(3000, 4000))
+    val rotationOrientation = mutableStateOf(0)
 
-    val surfaceViewSizeFlow = MutableStateFlow<Size?>(null)
+    val cameraFacing = mutableStateOf(CameraMetadata.LENS_FACING_BACK)
+
+    val sensorSize = mutableStateOf(Rect(0, 0, 4000, 3000))
 
     val sensorExposureTime = mutableStateOf(0L)
 
@@ -219,11 +252,27 @@ class Camera2ViewModel : ViewModel() {
 
     val rendererFrameRate = mutableStateOf(0)
 
-    val focusPeakingEnableFlow = MutableStateFlow(true)
+    val focusPeakingEnableFlow = MutableStateFlow(false)
 
-    val brightnessPeakingEnableFlow = MutableStateFlow(true)
+    val brightnessPeakingEnableFlow = MutableStateFlow(false)
 
-    val exposureHistogramEnableFlow = MutableStateFlow(true)
+    val exposureHistogramEnableFlow = MutableStateFlow(false)
+
+    val focusPointFlow = MutableStateFlow<Pair<Float, Float>?>(null)
+
+    val focusPointSize = mutableStateOf(Size(100, 100))
+
+    val focusState = mutableStateOf<Int?>(null)
+
+    val previewAFRegions = mutableStateOf<List<MeteringRectangle>?>(null)
+
+    val previewAERegions = mutableStateOf<List<MeteringRectangle>?>(null)
+
+    val availableFaceDetectModes = mutableStateListOf<FaceDetectMode>()
+
+    val currentFaceDetectModeFlow = MutableStateFlow<FaceDetectMode?>(null)
+
+    val previewFaceDetectResult = mutableStateListOf<Face>()
 
     fun fetchCurrentSupportedOutput(cameraCharacteristics: CameraCharacteristics) {
         val scaleStreamConfigurationMap = cameraCharacteristics.get(
@@ -232,7 +281,7 @@ class Camera2ViewModel : ViewModel() {
         val outputFormats = scaleStreamConfigurationMap.outputFormats
 
         outputSupportedItemList.clear()
-        OutputMode.values().forEach { outputMode ->
+        OutputMode.entries.forEach { outputMode ->
             if (outputFormats.contains(outputMode.imageFormat)) {
                 val outputSizes = scaleStreamConfigurationMap.getOutputSizes(outputMode.imageFormat)
                 val aspectList = getSizeByAspectRatio(outputSizes, imageAspectRatio)
@@ -291,8 +340,6 @@ class Camera2ViewModel : ViewModel() {
             focalDistanceRange.value = Range(0.0F, minimumFocusDistance)
         }
 
-        CameraMetadata.CONTROL_SCENE_MODE_DISABLED
-
         val ois =
             cameraCharacteristics[CameraCharacteristics.LENS_INFO_AVAILABLE_OPTICAL_STABILIZATION]
         oisAvailable.value =
@@ -336,13 +383,6 @@ class Camera2ViewModel : ViewModel() {
                 TAG,
                 "fetchCurrentSupportedOutput: physicalCameraIds ${cameraCharacteristics.physicalCameraIds}"
             )
-
-//            cameraCharacteristics.availablePhysicalCameraRequestKeys?.forEach {
-//                Log.i(TAG, "fetchCurrentSupportedOutput: availablePhysicalCameraRequestKeys ${it.name}")
-//            }
-//            cameraCharacteristics.availableCaptureRequestKeys.forEach {
-//                Log.i(TAG, "fetchCurrentSupportedOutput: availableCaptureRequestKeys ${it.name}")
-//            }
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_LOGICAL_MULTI_CAMERA
@@ -351,6 +391,24 @@ class Camera2ViewModel : ViewModel() {
         val hardwareLevel =
             cameraCharacteristics[CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL]
         Log.i(TAG, "fetchCurrentSupportedOutput: hardwareLevel $hardwareLevel")
+
+        val faceDetectModes =
+            cameraCharacteristics[CameraCharacteristics.STATISTICS_INFO_AVAILABLE_FACE_DETECT_MODES]
+        val maxFaceCount =
+            cameraCharacteristics[CameraCharacteristics.STATISTICS_INFO_MAX_FACE_COUNT]
+        Log.i(
+            TAG,
+            "fetchCurrentSupportedOutput: ${Arrays.toString(faceDetectModes)} - $maxFaceCount"
+        )
+        availableFaceDetectModes.clear()
+        faceDetectModes?.forEach {
+            FaceDetectMode.getByCode(it)?.let { faceDetectMode ->
+                availableFaceDetectModes.add(faceDetectMode)
+            }
+        }
+        if (availableFaceDetectModes.isNotEmpty()) {
+            currentFaceDetectModeFlow.value = availableFaceDetectModes.last()
+        }
     }
 
     val surfaceBitmap = mutableStateOf<Bitmap?>(null)
@@ -391,6 +449,8 @@ class Camera2ViewModel : ViewModel() {
             oisEnableFlow,
             currentSceneModeFlow,
             zoomRatioFlow,
+            focusPointFlow,
+            currentFaceDetectModeFlow,
         )
     ) { list -> list }
 
@@ -509,8 +569,78 @@ class Camera2ViewModel : ViewModel() {
                 )
             }
 
+            currentFaceDetectModeFlow.value?.let {
+                set(
+                    CaptureRequest.STATISTICS_FACE_DETECT_MODE,
+                    it.code
+                )
+            }
+
+            focusPointFlow.value?.let {
+                val meteringRectangle = calculateMeteringRectangle(
+                    point = it,
+                    pointSize = focusPointSize.value,
+                    rotationOrientation = rotationOrientation.value,
+                    cameraFacing = cameraFacing.value,
+                    sensorRect = sensorSize.value,
+                )
+
+                Log.i(TAG, "onCaptureCompleted setCurrentCaptureParams: $meteringRectangle")
+                currentMeteringRectangle = meteringRectangle
+                set(CaptureRequest.CONTROL_AF_REGIONS, arrayOf(meteringRectangle))
+                set(CaptureRequest.CONTROL_AE_REGIONS, arrayOf(meteringRectangle))
+                set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO)
+                set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_START)
+                set(
+                    CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER,
+                    CameraMetadata.CONTROL_AE_PRECAPTURE_TRIGGER_START
+                )
+            }
+
         }
     }
+
+    var currentMeteringRectangle: MeteringRectangle? = null
+
+    private fun calculateMeteringRectangle(
+        point: Pair<Float, Float>,
+        pointSize: Size,
+        rotationOrientation: Int,
+        cameraFacing: Int,
+        sensorRect: Rect,
+    ): MeteringRectangle {
+        val rotationPoint = calculateOrientationOffsetToSensor(point, rotationOrientation, cameraFacing)
+        val x = rotationPoint.first
+        val y = rotationPoint.second
+        // 定义对焦矩形的大小
+        val rectangleWidth = pointSize.width.toFloat()
+        val rectangleHeight = pointSize.height.toFloat()
+
+        val width = sensorRect.width()
+        val height = sensorRect.height()
+        // 计算相对于传感器尺寸的坐标
+        val sensorX = x * width
+        val sensorY = y * height
+
+        // 计算对焦矩形的左上角坐标
+//        var rectangleLeft = sensorX - rectangleWidth / 2
+//        var rectangleTop = sensorY - rectangleHeight / 2
+
+        var rectangleLeft = sensorX
+        var rectangleTop = sensorY
+        // 确保对焦矩形不会超出传感器范围
+        rectangleLeft = 0f.coerceAtLeast(rectangleLeft.coerceAtMost(width - rectangleWidth))
+        rectangleTop = 0f.coerceAtLeast(rectangleTop.coerceAtMost(height - rectangleHeight))
+        // 创建MeteringRectangle对象
+        val rect = Rect(
+            rectangleLeft.toInt(),
+            rectangleTop.toInt(),
+            (rectangleLeft + rectangleWidth).toInt(),
+            (rectangleTop + rectangleHeight).toInt()
+        )
+        return MeteringRectangle(rect, MeteringRectangle.METERING_WEIGHT_MAX)
+    }
+
 }
 
 fun calcTemperature(factor: Int): RggbChannelVector {

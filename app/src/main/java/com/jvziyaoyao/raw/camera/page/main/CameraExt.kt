@@ -157,6 +157,7 @@ fun chooseDefaultCameraPair(list: List<CameraPair>): CameraPair? {
             it.second.get(CameraCharacteristics.LENS_FACING)
                 ?: CameraMetadata.LENS_FACING_FRONT
         facing == CameraMetadata.LENS_FACING_BACK
+//        facing == CameraMetadata.LENS_FACING_FRONT
     }
     return if (frontCameraList.isNotEmpty()) {
         frontCameraList.first()
@@ -177,7 +178,7 @@ fun findBestSize(sizeList: Array<Size>?, maxWidth: Int? = null): Size? {
     if (sizeList == null) return null
     return sizeList.toList().stream()
         .run {
-            if (maxWidth!=null) {
+            if (maxWidth != null) {
                 filter { it.width <= maxWidth }
             } else this
         }
@@ -222,4 +223,53 @@ fun configureTransform(displayOrientation: Int, width: Int, height: Int): Matrix
         matrix.postRotate(180F, width.toFloat() / 2, height.toFloat() / 2)
     }
     return matrix
+}
+
+// 设置旋转角度
+fun calculateOrientationOffsetToSensor(
+    point: Pair<Float, Float>,
+    orientation: Int,
+    cameraFacing: Int,
+): Pair<Float, Float> {
+    val x = point.first
+    val y = point.second
+    return if (cameraFacing == CameraMetadata.LENS_FACING_FRONT) {
+        when (orientation) {
+            90 -> Pair(1 - y, x)
+            180 -> point
+            270 -> Pair(y, 1 - x)
+            else -> Pair(y, x)
+        }
+    } else {
+        when (orientation) {
+            90 -> Pair(y, 1 - x)
+            180 -> Pair(y, x)
+            270 -> Pair(1 - y, x)
+            else -> point
+        }
+    }
+}
+
+fun calculateOrientationOffsetFromSensor(
+    point: Pair<Float, Float>,
+    orientation: Int,
+    cameraFacing: Int,
+): Pair<Float, Float> {
+    val x = point.first
+    val y = point.second
+    return if (cameraFacing == CameraMetadata.LENS_FACING_FRONT) {
+        when (orientation) {
+            90 -> Pair(y, 1 - x)
+            180 -> point
+            270 -> Pair(1 - y, x)
+            else -> Pair(y, x)
+        }
+    } else {
+        when (orientation) {
+            90 -> Pair(1 - y,  x)
+            180 -> Pair(y, x)
+            270 -> Pair(y, 1 - x)
+            else -> point
+        }
+    }
 }
