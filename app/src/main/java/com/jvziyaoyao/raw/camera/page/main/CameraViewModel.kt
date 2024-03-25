@@ -197,6 +197,13 @@ enum class ExposureTime(
     ;
 }
 
+data class FocusRequestTrigger(
+    var focusRequest: Boolean,
+    var requestAFIdle: Boolean,
+    var requestAEIdle: Boolean,
+    val timestamp: Long = System.currentTimeMillis(),
+)
+
 class Camera2ViewModel : ViewModel() {
 
     private val TAG = Camera2ViewModel::class.java.name
@@ -259,6 +266,12 @@ class Camera2ViewModel : ViewModel() {
     val exposureHistogramEnableFlow = MutableStateFlow(true)
 
     val focusPointRectFlow = MutableStateFlow<androidx.compose.ui.geometry.Rect?>(null)
+
+    val focusRequestTriggerFlow = MutableStateFlow<FocusRequestTrigger?>(null)
+
+    val previewAFTrigger = mutableStateOf<Int?>(null)
+
+    val previewAETrigger = mutableStateOf<Int?>(null)
 
     val previewAFState = mutableStateOf<Int?>(null)
 
@@ -453,7 +466,7 @@ class Camera2ViewModel : ViewModel() {
             oisEnableFlow,
             currentSceneModeFlow,
             zoomRatioFlow,
-            focusPointRectFlow,
+            focusRequestTriggerFlow,
             currentFaceDetectModeFlow,
         )
     ) { list -> list }
@@ -497,7 +510,7 @@ class Camera2ViewModel : ViewModel() {
                 if (afEnable) {
                     set(
                         CaptureRequest.CONTROL_AF_MODE,
-                        CaptureRequest.CONTROL_AF_MODE_AUTO
+                        CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE
                     )
                 } else {
                     set(
@@ -516,7 +529,7 @@ class Camera2ViewModel : ViewModel() {
                 } else {
                     set(
                         CaptureRequest.CONTROL_AE_MODE,
-                        CaptureRequest.CONTROL_AE_MODE_OFF
+                        CaptureRequest.CONTROL_AE_MODE_ON
                     )
                     val sensorSensitivity = sensorSensitivityFlow.value
                     val sensorExposureTime = sensorExposureTimeFlow.value
@@ -580,27 +593,52 @@ class Camera2ViewModel : ViewModel() {
                 )
             }
 
-            // TODO 合焦后要更改为连续对焦，否则会一直对焦
-            focusPointRectFlow.value?.let {
-                val rect = composeRect2SensorRect(
-                    rect = it,
-                    rotationOrientation = rotationOrientation.value,
-                    cameraFacing = cameraFacing.value,
-                    sensorWidth = sensorSize.value.width(),
-                    sensorHeight = sensorSize.value.height(),
-                )
-                val meteringRectangle =
-                    MeteringRectangle(rect, MeteringRectangle.METERING_WEIGHT_MAX)
-                set(CaptureRequest.CONTROL_AF_REGIONS, arrayOf(meteringRectangle))
-                set(CaptureRequest.CONTROL_AE_REGIONS, arrayOf(meteringRectangle))
-                set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO)
-                set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_START)
-                set(
-                    CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER,
-                    CameraMetadata.CONTROL_AE_PRECAPTURE_TRIGGER_START
-                )
-            }
+            focusRequestTriggerFlow.value?.apply {
+                Log.i(TAG, "setCurrentCaptureParams: onCaptureCompleted focusRequestTriggerFlow $this")
+                if (focusRequest) {
+                    focusPointRectFlow.value?.let { focusPointRect ->
+                        val rect = composeRect2SensorRect(
+                            rect = focusPointRect,
+                            rotationOrientation = rotationOrientation.value,
+                            cameraFacing = cameraFacing.value,
+                            sensorWidth = sensorSize.value.width(),
+                            sensorHeight = sensorSize.value.height(),
+                        )
+                        val meteringRectangle =
+                            MeteringRectangle(rect, MeteringRectangle.METERING_WEIGHT_MAX)
 
+                        set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO)
+                        set(CaptureRequest.CONTROL_AF_REGIONS, arrayOf(meteringRectangle))
+                        set(
+                            CaptureRequest.CONTROL_AF_TRIGGER,
+                            CameraMetadata.CONTROL_AF_TRIGGER_START
+                        )
+
+                        set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+                        set(CaptureRequest.CONTROL_AE_REGIONS, arrayOf(meteringRectangle))
+                        set(
+                            CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER,
+                            CameraMetadata.CONTROL_AE_PRECAPTURE_TRIGGER_START
+                        )
+                    }
+                    focusRequest = false
+                }
+                if (requestAFIdle) {
+                    set(
+                        CaptureRequest.CONTROL_AF_TRIGGER,
+                        CameraMetadata.CONTROL_AF_TRIGGER_IDLE
+                    )
+                    requestAFIdle = false
+                }
+                if (requestAEIdle) {
+                    Log.i(TAG, "setCurrentCaptureParams: focusRequestTriggerFlow $requestAEIdle")
+                    set(
+                        CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER,
+                        CameraMetadata.CONTROL_AE_PRECAPTURE_TRIGGER_IDLE
+                    )
+                    requestAEIdle = false
+                }
+            }
         }
     }
 

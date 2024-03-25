@@ -471,19 +471,79 @@ class Camera2Activity : ComponentActivity(), CoroutineScope by MainScope() {
                         it == CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON
                 }
 
+            result.get(CaptureResult.CONTROL_AF_TRIGGER)
+                ?.let {
+                    mViewModel.previewAFTrigger.value = it
+                }
+            result.get(CaptureResult.CONTROL_AE_PRECAPTURE_TRIGGER)
+                ?.let {
+                    mViewModel.previewAETrigger.value = it
+                }
+
+            result.apply {
+                Log.i(
+                    TAG,
+                    "onCaptureCompleted: ${get(CaptureResult.CONTROL_AF_TRIGGER)} - ${
+                        get(CaptureResult.CONTROL_AE_PRECAPTURE_TRIGGER)
+                    } - ${get(CaptureResult.CONTROL_AF_STATE)} - ${get(CaptureResult.CONTROL_AE_STATE)}"
+                )
+            }
+
+//            val focusRequestTrigger = mViewModel.focusRequestTriggerFlow.value
+//            var markFocusRequestTriggerUpdate = false
+            var currentAFTrigger = CaptureResult.CONTROL_AF_TRIGGER_IDLE
+            var currentAETrigger = CaptureResult.CONTROL_AE_PRECAPTURE_TRIGGER_IDLE
+            result.get(CaptureResult.CONTROL_AF_TRIGGER)
+                ?.let {
+                    currentAFTrigger = it
+                }
             result.get(CaptureResult.CONTROL_AF_STATE)
                 ?.let {
                     mViewModel.previewAFState.value = it
+//                    if ((it == CaptureResult.CONTROL_AF_STATE_FOCUSED_LOCKED
+//                                || it == CaptureResult.CONTROL_AF_STATE_NOT_FOCUSED_LOCKED)
+//                        && currentAFTrigger != CaptureResult.CONTROL_AF_TRIGGER_IDLE
+//
+//                    ) {
+//                        focusRequestTrigger?.apply {
+//                            if (!requestAFIdle) {
+//                                requestAFIdle = true
+//                                markFocusRequestTriggerUpdate = true
+//                            }
+//                        }
+//                    }
                 }
             result.get(CaptureResult.CONTROL_AF_REGIONS)
                 ?.let {
                     mViewModel.previewAFRegions.value = it.toList()
                 }
 
+            result.get(CaptureResult.CONTROL_AE_PRECAPTURE_TRIGGER)
+                ?.let {
+                    currentAETrigger = it
+                }
             result.get(CaptureResult.CONTROL_AE_STATE)
                 ?.let {
                     mViewModel.previewAEState.value = it
+//                    if ((it == CaptureResult.CONTROL_AE_STATE_CONVERGED
+//                                || it == CaptureResult.CONTROL_AE_STATE_FLASH_REQUIRED)
+//                        && currentAETrigger != CaptureResult.CONTROL_AE_PRECAPTURE_TRIGGER_IDLE
+//                    ) {
+//                        focusRequestTrigger?.apply {
+//                            if (!requestAEIdle) {
+//                                requestAEIdle = true
+//                                markFocusRequestTriggerUpdate = true
+//                            }
+//                        }
+//                    }
                 }
+//            if (markFocusRequestTriggerUpdate) {
+//                val nextTrigger = focusRequestTrigger?.copy(timestamp = System.currentTimeMillis())
+//                Log.i(TAG, "onCaptureCompleted: focusRequestTriggerFlow $nextTrigger")
+//                mViewModel.focusRequestTriggerFlow.value = nextTrigger
+//            }
+
+
             result.get(CaptureResult.CONTROL_AE_REGIONS)
                 ?.let {
                     mViewModel.previewAERegions.value = it.toList()
@@ -866,6 +926,8 @@ fun Camera2PreviewLayer(
                             fingerRect.value = rect
                             val normalizedRect = rectNormalized(rect, previewWidth, previewHeight)
                             viewModel.focusPointRectFlow.value = normalizedRect
+                            viewModel.focusRequestTriggerFlow.value =
+                                FocusRequestTrigger(true, false, false)
                         }
                     }
                     .onSizeChanged {
@@ -911,6 +973,7 @@ fun Camera2PreviewLayer(
                             color = when (previewAFState.value) {
                                 CameraMetadata.CONTROL_AF_STATE_ACTIVE_SCAN -> Color.White
                                 CameraMetadata.CONTROL_AF_STATE_FOCUSED_LOCKED -> Color.Green
+                                CameraMetadata.CONTROL_AF_STATE_NOT_FOCUSED_LOCKED -> Color.Red
                                 else -> Color.Gray
                             },
                             radius = circleSize,
@@ -940,7 +1003,7 @@ fun Camera2PreviewLayer(
                         drawCircle(
                             color = when (previewAEState.value) {
                                 CameraMetadata.CONTROL_AE_STATE_PRECAPTURE -> Color.White
-                                CameraMetadata.CONTROL_AE_STATE_CONVERGED -> Color.Green
+                                CameraMetadata.CONTROL_AE_STATE_CONVERGED, CameraMetadata.CONTROL_AE_STATE_FLASH_REQUIRED -> Color.Green
                                 else -> Color.Gray
                             },
                             radius = circleSize,
