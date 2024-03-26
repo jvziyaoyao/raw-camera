@@ -62,9 +62,10 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.RawCamera"
+        android:name=".RawCameraApplication"
         tools:targetApi="31">
         <activity
-            android:name=".page.main.Camera2Activity"
+            android:name=".page.main.CameraActivity"
             android:exported="true"
             android:screenOrientation="fullSensor"
             android:theme="@style/Theme.RawCamera">
@@ -73,6 +74,17 @@
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+        </activity>
+        <activity
+            android:name=".page.sensor.SensorActivity"
+            android:exported="true"
+            android:screenOrientation="fullSensor"
+            android:theme="@style/Theme.RawCamera">
+<!--            <intent-filter>-->
+<!--                <action android:name="android.intent.action.MAIN" />-->
+
+<!--                <category android:name="android.intent.category.LAUNCHER" />-->
+<!--            </intent-filter>-->
         </activity>
     </application>
 

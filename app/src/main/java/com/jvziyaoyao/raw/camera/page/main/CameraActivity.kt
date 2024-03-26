@@ -27,11 +27,12 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.viewModels
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -48,6 +49,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -57,6 +59,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -76,8 +79,8 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.jvziyaoyao.raw.camera.ui.base.CommonPermissions
+import com.jvziyaoyao.raw.camera.ui.base.animateRotationAsState
 import com.jvziyaoyao.raw.camera.ui.theme.Layout
 import com.jvziyaoyao.raw.camera.util.testTime
 import kotlinx.coroutines.CoroutineScope
@@ -90,6 +93,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import org.koin.androidx.compose.koinViewModel
+import org.koin.androidx.viewmodel.ext.android.viewModel
 import org.opencv.android.OpenCVLoader
 import org.opencv.core.Core
 import org.opencv.core.CvType
@@ -97,6 +102,7 @@ import org.opencv.core.Mat
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
+import kotlin.math.absoluteValue
 
 
 /**
@@ -108,11 +114,11 @@ import java.nio.ByteBuffer
  *
  * @create: 2024-01-08 17:36
  **/
-class Camera2Activity : ComponentActivity(), CoroutineScope by MainScope() {
+class CameraActivity : ComponentActivity(), CoroutineScope by MainScope() {
 
-    private val TAG = Camera2Activity::class.java.name
+    private val TAG = CameraActivity::class.java.name
 
-    private val mViewModel by viewModels<Camera2ViewModel>()
+    private val mViewModel by viewModel<CameraViewModel>()
 
     private var cameraDeviceFlow = MutableStateFlow<CameraDevice?>(null)
 
@@ -403,10 +409,39 @@ class Camera2Activity : ComponentActivity(), CoroutineScope by MainScope() {
                     } else brightnessPeakingMat ?: focusPeakingMat
             }
         }
+
+        // 监听传感器角度变化
+        launch(Dispatchers.IO) {
+            combine(
+                mViewModel.pitchFlow,
+                mViewModel.rollFlow,
+                mViewModel.yawFlow,
+            ) { t01, t02, t03 ->
+                arrayOf(t01, t02, t03)
+            }.collectLatest {
+                val currentPitch = mViewModel.pitchFlow.value
+                val currentRoll = mViewModel.rollFlow.value
+                val currentYaw = mViewModel.yawFlow.value
+                val focusRequestOrientation = mViewModel.focusRequestOrientation.value
+                focusRequestOrientation?.apply {
+                    val delta = 10F
+                    val delay = 1000 * 2 // 两秒内不要取消
+                    if (
+                        (System.currentTimeMillis() - timestamp > delay)
+                        && ((currentPitch - pitch).absoluteValue > delta
+                                || (currentRoll - roll).absoluteValue > delta
+                                || (currentYaw - yaw).absoluteValue > delta)
+                    ) {
+                        mViewModel.focusCancel()
+                    }
+                }
+            }
+        }
     }
 
     override fun onResume() {
         super.onResume()
+        mViewModel.startSensor()
         launch {
             mViewModel.resumeTimestampFlow.emit(System.currentTimeMillis())
         }
@@ -415,6 +450,7 @@ class Camera2Activity : ComponentActivity(), CoroutineScope by MainScope() {
     override fun onPause() {
         super.onPause()
         closeCamera()
+        mViewModel.stopSensor()
         launch {
             mViewModel.resumeTimestampFlow.emit(null)
         }
@@ -870,8 +906,7 @@ fun Camera2Body(
 fun Camera2PreviewLayer(
     onGLSurfaceView: (GLSurfaceView) -> Unit,
 ) {
-    val viewModel: Camera2ViewModel = viewModel()
-    val density = LocalDensity.current
+    val viewModel: CameraViewModel = koinViewModel()
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val portrait = maxHeight > maxWidth
         Box(
@@ -925,9 +960,7 @@ fun Camera2PreviewLayer(
                             )
                             fingerRect.value = rect
                             val normalizedRect = rectNormalized(rect, previewWidth, previewHeight)
-                            viewModel.focusPointRectFlow.value = normalizedRect
-                            viewModel.focusRequestTriggerFlow.value =
-                                FocusRequestTrigger(true, false, false)
+                            viewModel.focusRequest(normalizedRect)
                         }
                     }
                     .onSizeChanged {
@@ -1031,13 +1064,15 @@ fun Camera2PreviewLayer(
                     }
                 }
             }
+
+            CameraSeaLevel()
         }
     }
 }
 
 @Composable
 fun Camera2InfoLayer() {
-    val viewModel: Camera2ViewModel = viewModel()
+    val viewModel: CameraViewModel = koinViewModel()
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
@@ -1111,7 +1146,7 @@ fun Camera2InfoLayer() {
 fun Camera2ActionLayer(
     onCapture: () -> Unit,
 ) {
-    val viewModel: Camera2ViewModel = viewModel()
+    val viewModel: CameraViewModel = koinViewModel()
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
@@ -1413,6 +1448,100 @@ fun Camera2ActionLayer(
                     Text(text = "拍照")
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun CameraSeaLevel() {
+    val density = LocalDensity.current
+    val viewModel: CameraViewModel = koinViewModel()
+    Box(
+        modifier = Modifier.fillMaxSize()
+    ) {
+        Box(
+            modifier = Modifier
+                .size(80.dp)
+                .clip(CircleShape)
+                .border(
+                    width = 2.dp,
+                    color = MaterialTheme.colorScheme.onBackground.copy(0.2F),
+                    shape = CircleShape,
+                )
+                .align(Alignment.Center),
+        )
+
+        val gravity = viewModel.gravityFlow.collectAsState()
+        val gravityDegreesAnimation = animateRotationAsState(targetValue = gravity.value)
+        val pitch = viewModel.pitchFlow.collectAsState()
+        val roll = viewModel.rollFlow.collectAsState()
+        val pitchAnimation = animateFloatAsState(targetValue = pitch.value)
+        val rollAnimation = animateFloatAsState(targetValue = roll.value)
+        val offsetPY = remember {
+            derivedStateOf {
+                var p = pitchAnimation.value.div(90F)
+                if (p < -1) p = -1F
+                if (p > 1) p = 1F
+                p
+            }
+        }
+        val offsetPX = remember {
+            derivedStateOf {
+                var p = -rollAnimation.value.div(90F)
+                if (p < -1) p = -1F
+                if (p > 1) p = 1F
+                p
+            }
+        }
+        val bubbleViewVisible = remember(offsetPX.value, offsetPY.value) {
+            derivedStateOf {
+                offsetPX.value.absoluteValue < 0.5 && offsetPY.value.absoluteValue < 0.5
+            }
+        }
+        val bubbleAlphaAnimation =
+            animateFloatAsState(targetValue = if (bubbleViewVisible.value) 1F else 0F)
+
+        Box(
+            modifier = Modifier
+                .graphicsLayer {
+                    rotationZ = gravityDegreesAnimation.value
+                    alpha = 1 - bubbleAlphaAnimation.value
+                }
+                .width(100.dp)
+                .height(4.dp)
+                .clip(CircleShape)
+                .background(color = MaterialTheme.colorScheme.primary)
+                .align(Alignment.Center)
+        )
+
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1F)
+                .align(Alignment.Center)
+        ) {
+            val offsetY = remember(offsetPY.value) {
+                derivedStateOf {
+                    density.run { maxHeight.toPx().div(2).times(offsetPY.value) }
+                }
+            }
+            val offsetX = remember(offsetPX.value) {
+                derivedStateOf {
+                    density.run { maxWidth.toPx().div(2).times(offsetPX.value) }
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .graphicsLayer {
+                        translationX = offsetX.value
+                        translationY = offsetY.value
+                        alpha = bubbleAlphaAnimation.value
+                    }
+                    .size(60.dp)
+                    .clip(CircleShape)
+                    .background(color = MaterialTheme.colorScheme.onBackground.copy(0.2F))
+                    .align(Alignment.Center)
+            )
         }
     }
 }

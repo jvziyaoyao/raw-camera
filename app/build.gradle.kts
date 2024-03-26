@@ -52,6 +52,14 @@ android {
 dependencies {
     implementation("org.opencv:opencv:4.9.0")
 
+    // Koin for Kotlin apps
+    val koin_version = "3.4.2"
+    val koin_android_compose_version = "3.4.5"
+    implementation("io.insert-koin:koin-android:$koin_version")
+    testImplementation("io.insert-koin:koin-test:$koin_version")
+    testImplementation("io.insert-koin:koin-test-junit4:$koin_version")
+    implementation("io.insert-koin:koin-androidx-compose:$koin_android_compose_version")
+
     val accompanist_version = "0.24.1-alpha"
     implementation("com.google.accompanist:accompanist-systemuicontroller:$accompanist_version")
     implementation("com.google.accompanist:accompanist-insets:$accompanist_version")

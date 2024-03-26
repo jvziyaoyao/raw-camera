@@ -18,6 +18,7 @@ import android.view.SurfaceHolder
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
+import com.jvziyaoyao.raw.camera.domain.usecase.SensorUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
@@ -199,14 +200,27 @@ enum class ExposureTime(
 
 data class FocusRequestTrigger(
     var focusRequest: Boolean,
-    var requestAFIdle: Boolean,
-    var requestAEIdle: Boolean,
-    val timestamp: Long = System.currentTimeMillis(),
+    var focusCancel: Boolean,
 )
 
-class Camera2ViewModel : ViewModel() {
+data class FocusRequestOrientation(
+    var pitch: Float,
+    var roll: Float,
+    var yaw: Float,
+    var timestamp: Long = System.currentTimeMillis(),
+)
 
-    private val TAG = Camera2ViewModel::class.java.name
+class CameraViewModel(
+    private val sensorUseCase: SensorUseCase
+) : ViewModel() {
+
+    private val TAG = CameraViewModel::class.java.name
+
+    val gravityFlow = sensorUseCase.gravityFlow
+
+    val pitchFlow = sensorUseCase.pitchFlow
+    val rollFlow = sensorUseCase.rollFlow
+    val yawFlow = sensorUseCase.yawFlow
 
     val imageAspectRatio = 4F.div(3F)
 
@@ -268,6 +282,8 @@ class Camera2ViewModel : ViewModel() {
     val focusPointRectFlow = MutableStateFlow<androidx.compose.ui.geometry.Rect?>(null)
 
     val focusRequestTriggerFlow = MutableStateFlow<FocusRequestTrigger?>(null)
+
+    val focusRequestOrientation = mutableStateOf<FocusRequestOrientation?>(null)
 
     val previewAFTrigger = mutableStateOf<Int?>(null)
 
@@ -594,7 +610,10 @@ class Camera2ViewModel : ViewModel() {
             }
 
             focusRequestTriggerFlow.value?.apply {
-                Log.i(TAG, "setCurrentCaptureParams: onCaptureCompleted focusRequestTriggerFlow $this")
+                Log.i(
+                    TAG,
+                    "setCurrentCaptureParams: onCaptureCompleted focusRequestTriggerFlow $this"
+                )
                 if (focusRequest) {
                     focusPointRectFlow.value?.let { focusPointRect ->
                         val rect = composeRect2SensorRect(
@@ -623,24 +642,47 @@ class Camera2ViewModel : ViewModel() {
                     }
                     focusRequest = false
                 }
-                if (requestAFIdle) {
+                if (focusCancel) {
                     set(
                         CaptureRequest.CONTROL_AF_TRIGGER,
                         CameraMetadata.CONTROL_AF_TRIGGER_IDLE
                     )
-                    requestAFIdle = false
-                }
-                if (requestAEIdle) {
-                    Log.i(TAG, "setCurrentCaptureParams: focusRequestTriggerFlow $requestAEIdle")
+                    set(CaptureRequest.CONTROL_AF_REGIONS, null)
                     set(
                         CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER,
                         CameraMetadata.CONTROL_AE_PRECAPTURE_TRIGGER_IDLE
                     )
-                    requestAEIdle = false
+                    set(CaptureRequest.CONTROL_AE_REGIONS, null)
                 }
             }
         }
     }
+
+    fun focusRequest(rect: androidx.compose.ui.geometry.Rect) {
+        focusRequestOrientation.value = FocusRequestOrientation(
+            pitch = pitchFlow.value,
+            roll = rollFlow.value,
+            yaw = yawFlow.value,
+        )
+        focusPointRectFlow.value = rect
+        focusRequestTriggerFlow.value = FocusRequestTrigger(
+            focusRequest = true,
+            focusCancel = false
+        )
+    }
+
+    fun focusCancel() {
+        focusRequestOrientation.value = null
+        focusRequestTriggerFlow.value = FocusRequestTrigger(
+            focusRequest = false,
+            focusCancel = true,
+        )
+        Log.i(TAG, "focusCancel: 取消对焦～")
+    }
+
+    fun startSensor() = sensorUseCase.start()
+
+    fun stopSensor() = sensorUseCase.stop()
 
 }
 
