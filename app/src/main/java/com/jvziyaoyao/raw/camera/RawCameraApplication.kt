@@ -1,7 +1,7 @@
 package com.jvziyaoyao.raw.camera
 
 import android.app.Application
-import com.jvziyaoyao.raw.camera.domain.usecase.SensorUseCase
+import com.jvziyaoyao.raw.camera.domain.clean.usecase.SensorUseCase
 import com.jvziyaoyao.raw.camera.page.main.CameraViewModel
 import com.jvziyaoyao.raw.camera.page.sensor.SensorViewModel
 import kotlinx.coroutines.CoroutineScope

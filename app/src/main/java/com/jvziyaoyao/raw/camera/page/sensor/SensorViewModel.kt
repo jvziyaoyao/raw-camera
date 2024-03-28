@@ -1,7 +1,7 @@
 package com.jvziyaoyao.raw.camera.page.sensor
 
 import androidx.lifecycle.ViewModel
-import com.jvziyaoyao.raw.camera.domain.usecase.SensorUseCase
+import com.jvziyaoyao.raw.camera.domain.clean.usecase.SensorUseCase
 
 class SensorViewModel(
     private val sensorUseCase: SensorUseCase

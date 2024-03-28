@@ -18,7 +18,7 @@ import android.view.SurfaceHolder
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
-import com.jvziyaoyao.raw.camera.domain.usecase.SensorUseCase
+import com.jvziyaoyao.raw.camera.domain.clean.usecase.SensorUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
@@ -224,6 +224,8 @@ class CameraViewModel(
 
     val imageAspectRatio = 4F.div(3F)
 
+    val displayRotation = mutableStateOf(0)
+
     val resumeTimestampFlow = MutableStateFlow<Long?>(null)
 
     val cameraPairListFlow =
@@ -269,7 +271,7 @@ class CameraViewModel(
 
     val captureModeFlow = MutableStateFlow(CaptureMode.MANUAL)
 
-    val frameRate = mutableStateOf(0)
+    val captureFrameRate = mutableStateOf(0)
 
     val rendererFrameRate = mutableStateOf(0)
 

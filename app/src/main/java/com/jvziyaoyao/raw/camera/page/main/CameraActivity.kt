@@ -147,10 +147,14 @@ class CameraActivity : ComponentActivity(), CoroutineScope by MainScope() {
     private val handler = Handler(handlerThread.looper)
 
     private val displayRotation: Int
-        get() = when (windowManager.defaultDisplay.rotation) {
-            1 -> 90
-            2 -> 180
-            3 -> 270
+        get() = when (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            display
+        } else {
+            windowManager.defaultDisplay
+        }?.rotation) {
+            Surface.ROTATION_90 -> 90
+            Surface.ROTATION_180 -> 180
+            Surface.ROTATION_270 -> 270
             else -> 0
         }
 
@@ -170,6 +174,7 @@ class CameraActivity : ComponentActivity(), CoroutineScope by MainScope() {
         OpenCVLoader.initLocal()
         // 获取摄像头列表
         // 必须先在activity中执行这一行，以确保UI中不会自己创建一个新的viewModel
+        mViewModel.displayRotation.value = displayRotation
         mViewModel.cameraPairListFlow.value = fetchCameraPairList()
 
         setContent {
@@ -223,20 +228,22 @@ class CameraActivity : ComponentActivity(), CoroutineScope by MainScope() {
             ) { t1, t2, t3 -> Triple(t1, t2, t3) }.collectLatest { t ->
                 val cameraPair = mViewModel.currentCameraPairFlow.value
                 val allPermissionGrantedFlow = mViewModel.allPermissionGrantedFlow.value
-                if (allPermissionGrantedFlow) {
+                val resumeTimeStamp = mViewModel.resumeTimestampFlow.value
+                if (allPermissionGrantedFlow && resumeTimeStamp != null) {
                     if (cameraDeviceFlow.value != null) {
-                        // 关闭摄像头
-                        closeCamera()
-                    }
-                    if (cameraPair != null) {
-                        val cameraCharacteristics = cameraPair.second
-                        // 获取当前摄像头支持的输出格式
-                        mViewModel.fetchCurrentSupportedOutput(cameraCharacteristics)
-                        // 设置预览渲染的旋转角度
-                        setOrientation(cameraCharacteristics)
+                        if (cameraDeviceFlow.value?.id != cameraPair?.first) {
+                            // 关闭摄像头
+                            closeCamera()
+                            // 开启摄像头
+                            cameraPair?.let { openCamera(it) }
+                        }
+                    } else {
                         // 开启摄像头
-                        openCamera(cameraPair)
+                        cameraPair?.let { openCamera(it) }
                     }
+                } else {
+                    // 关闭摄像头
+                    closeCamera()
                 }
             }
         }
@@ -248,16 +255,18 @@ class CameraActivity : ComponentActivity(), CoroutineScope by MainScope() {
                 mViewModel.currentOutputItemFlow,
                 mViewModel.currentCameraPairFlow,
             ) { t0, t1, t2 ->
-                arrayOf(t0, t1, t2)
+                Triple(t0, t1, t2)
             }.collectLatest { t ->
-                val cameraDevice = cameraDeviceFlow.value
-                val cameraPair = mViewModel.currentCameraPairFlow.value
-                val currentOutputItem = mViewModel.currentOutputItemFlow.value
+                val cameraDevice = t.first
+                val currentOutputItem = t.second
+                val cameraPair = t.third
                 val cameraCharacteristics = cameraPair?.second
                 val imageAspectRatio = mViewModel.imageAspectRatio
+                val cameraId = cameraPair?.first
                 if (
                     cameraDevice != null
                     && cameraCharacteristics != null
+                    && cameraId == cameraDevice.id
                 ) {
                     startPreview(
                         cameraDevice,
@@ -320,7 +329,7 @@ class CameraActivity : ComponentActivity(), CoroutineScope by MainScope() {
                                     TAG,
                                     "onCreate: calc frame 计算帧率： $frameCount - ${cameraSurfaceRender.frameCount}"
                                 )
-                                mViewModel.frameRate.value = frameCount - currentCount
+                                mViewModel.captureFrameRate.value = frameCount - currentCount
                                 mViewModel.rendererFrameRate.value =
                                     cameraSurfaceRender.frameCount - currentRenderCount
                                 currentCount = frameCount
@@ -442,18 +451,13 @@ class CameraActivity : ComponentActivity(), CoroutineScope by MainScope() {
     override fun onResume() {
         super.onResume()
         mViewModel.startSensor()
-        launch {
-            mViewModel.resumeTimestampFlow.emit(System.currentTimeMillis())
-        }
+        mViewModel.resumeTimestampFlow.value = System.currentTimeMillis()
     }
 
     override fun onPause() {
         super.onPause()
-        closeCamera()
         mViewModel.stopSensor()
-        launch {
-            mViewModel.resumeTimestampFlow.emit(null)
-        }
+        mViewModel.resumeTimestampFlow.value = null
     }
 
     override fun onDestroy() {
@@ -841,6 +845,12 @@ class CameraActivity : ComponentActivity(), CoroutineScope by MainScope() {
 
     @SuppressLint("MissingPermission")
     private fun openCamera(cameraPair: CameraPair) {
+        val cameraCharacteristics = cameraPair.second
+        // 获取当前摄像头支持的输出格式
+        mViewModel.fetchCurrentSupportedOutput(cameraCharacteristics)
+        // 设置预览渲染的旋转角度
+        setOrientation(cameraCharacteristics)
+        // 实际开启摄像头代码
         val cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
         val cameraId = cameraPair.first
         cameraManager.openCamera(cameraId, object : CameraDevice.StateCallback() {
@@ -892,7 +902,9 @@ fun Camera2Body(
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
         // 预览图层
-        Camera2PreviewLayer(onGLSurfaceView = onGLSurfaceView)
+        Camera2PreviewLayer(
+            onGLSurfaceView = onGLSurfaceView,
+        )
         // 信息图层
         Camera2InfoLayer()
         // 操作图层
@@ -1083,7 +1095,7 @@ fun Camera2InfoLayer() {
                 .padding(Layout.padding.pm)
         ) {
             Text(
-                text = "${viewModel.frameRate.value}-${viewModel.rendererFrameRate.value}",
+                text = "${viewModel.captureFrameRate.value}-${viewModel.rendererFrameRate.value}",
                 color = Color.Green,
                 fontSize = Layout.fontSize.fl,
                 fontWeight = FontWeight.Bold
@@ -1472,7 +1484,7 @@ fun CameraSeaLevel() {
         )
 
         val gravity = viewModel.gravityFlow.collectAsState()
-        val gravityDegreesAnimation = animateRotationAsState(targetValue = gravity.value)
+        val gravityDegreesAnimation = animateRotationAsState(targetValue = gravity.value - viewModel.displayRotation.value)
         val pitch = viewModel.pitchFlow.collectAsState()
         val roll = viewModel.rollFlow.collectAsState()
         val pitchAnimation = animateFloatAsState(targetValue = pitch.value)

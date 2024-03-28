@@ -1,4 +1,4 @@
-package com.jvziyaoyao.raw.camera.domain.usecase
+package com.jvziyaoyao.raw.camera.domain.clean.usecase
 
 import android.hardware.Sensor
 import android.hardware.SensorEvent
