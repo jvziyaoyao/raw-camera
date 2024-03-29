@@ -89,9 +89,12 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.androidx.viewmodel.ext.android.viewModel
@@ -130,11 +133,7 @@ class CameraActivity : ComponentActivity(), CoroutineScope by MainScope() {
 
     private val cameraSurfaceRender = CameraSurfaceRenderer(TEX_VERTEX_MAT_BACK_0)
 
-    private var imageJpegReader: ImageReader? = null
-
-    private var imageHeicReader: ImageReader? = null
-
-    private var imageRawReader: ImageReader? = null
+    private var imageOutputReader: ImageReader? = null
 
     private var imagePreviewReader: ImageReader? = null
 
@@ -167,6 +166,8 @@ class CameraActivity : ComponentActivity(), CoroutineScope by MainScope() {
     private val focusPeakingMatFlow = MutableStateFlow<Mat?>(null)
 
     private val brightnessPeakingMatFlow = MutableStateFlow<Mat?>(null)
+
+    private val outputFileFlow = MutableSharedFlow<File?>(0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -392,7 +393,7 @@ class CameraActivity : ComponentActivity(), CoroutineScope by MainScope() {
                                 .apply { preMultiplyAlpha() }
                         } else null
                 }
-                Log.i(TAG, "onCreate: focusPeakingMat time -> $time")
+//                Log.i(TAG, "onCreate: focusPeakingMat time -> $time")
             }
         }
 
@@ -472,18 +473,15 @@ class CameraActivity : ComponentActivity(), CoroutineScope by MainScope() {
         val cameraCaptureRequest =
             cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE)
                 .apply {
-                    when (outputItem?.outputMode) {
-                        OutputMode.JPEG -> imageJpegReader?.apply { addTarget(surface) }
-                        OutputMode.HEIC -> imageHeicReader?.apply { addTarget(surface) }
-                        OutputMode.RAW -> imageRawReader?.apply { addTarget(surface) }
-                        else -> {}
+                    if (outputItem != null) {
+                        imageOutputReader?.apply { addTarget(surface) }
                     }
                     mViewModel.setCurrentCaptureParams(this)
                 }.build()
-
         captureTimestamp = System.currentTimeMillis()
         captureResult = cameraCaptureSessionFlow.value?.captureAsync(cameraCaptureRequest, handler)
-        Log.i(TAG, "onCapture: $captureResult")
+        outputFileFlow.takeWhile { it != null }.first()
+        outputFileFlow.emit(null)
     }
 
     private val previewCaptureCallback = object : CaptureCallback() {
@@ -493,116 +491,7 @@ class CameraActivity : ComponentActivity(), CoroutineScope by MainScope() {
             result: TotalCaptureResult
         ) {
             super.onCaptureCompleted(session, request, result)
-            result.get(CaptureResult.SENSOR_EXPOSURE_TIME)
-                ?.let { mViewModel.sensorExposureTime.value = it }
-            result.get(CaptureResult.SENSOR_SENSITIVITY)
-                ?.let { mViewModel.sensorSensitivity.value = it }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                result.get(CaptureResult.CONTROL_ZOOM_RATIO)
-                    ?.let { mViewModel.previewZoomRatio.value = it }
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                result.get(CaptureResult.CONTROL_SCENE_MODE)
-                    ?.let { mViewModel.previewSceneMode.value = SceneMode.getByCode(it) }
-            }
-            result.get(CaptureResult.LENS_OPTICAL_STABILIZATION_MODE)
-                ?.let {
-                    mViewModel.previewOisEnable.value =
-                        it == CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON
-                }
-
-            result.get(CaptureResult.CONTROL_AF_TRIGGER)
-                ?.let {
-                    mViewModel.previewAFTrigger.value = it
-                }
-            result.get(CaptureResult.CONTROL_AE_PRECAPTURE_TRIGGER)
-                ?.let {
-                    mViewModel.previewAETrigger.value = it
-                }
-
-            result.apply {
-                Log.i(
-                    TAG,
-                    "onCaptureCompleted: ${get(CaptureResult.CONTROL_AF_TRIGGER)} - ${
-                        get(CaptureResult.CONTROL_AE_PRECAPTURE_TRIGGER)
-                    } - ${get(CaptureResult.CONTROL_AF_STATE)} - ${get(CaptureResult.CONTROL_AE_STATE)}"
-                )
-            }
-
-//            val focusRequestTrigger = mViewModel.focusRequestTriggerFlow.value
-//            var markFocusRequestTriggerUpdate = false
-            var currentAFTrigger = CaptureResult.CONTROL_AF_TRIGGER_IDLE
-            var currentAETrigger = CaptureResult.CONTROL_AE_PRECAPTURE_TRIGGER_IDLE
-            result.get(CaptureResult.CONTROL_AF_TRIGGER)
-                ?.let {
-                    currentAFTrigger = it
-                }
-            result.get(CaptureResult.CONTROL_AF_STATE)
-                ?.let {
-                    mViewModel.previewAFState.value = it
-//                    if ((it == CaptureResult.CONTROL_AF_STATE_FOCUSED_LOCKED
-//                                || it == CaptureResult.CONTROL_AF_STATE_NOT_FOCUSED_LOCKED)
-//                        && currentAFTrigger != CaptureResult.CONTROL_AF_TRIGGER_IDLE
-//
-//                    ) {
-//                        focusRequestTrigger?.apply {
-//                            if (!requestAFIdle) {
-//                                requestAFIdle = true
-//                                markFocusRequestTriggerUpdate = true
-//                            }
-//                        }
-//                    }
-                }
-            result.get(CaptureResult.CONTROL_AF_REGIONS)
-                ?.let {
-                    mViewModel.previewAFRegions.value = it.toList()
-                }
-
-            result.get(CaptureResult.CONTROL_AE_PRECAPTURE_TRIGGER)
-                ?.let {
-                    currentAETrigger = it
-                }
-            result.get(CaptureResult.CONTROL_AE_STATE)
-                ?.let {
-                    mViewModel.previewAEState.value = it
-//                    if ((it == CaptureResult.CONTROL_AE_STATE_CONVERGED
-//                                || it == CaptureResult.CONTROL_AE_STATE_FLASH_REQUIRED)
-//                        && currentAETrigger != CaptureResult.CONTROL_AE_PRECAPTURE_TRIGGER_IDLE
-//                    ) {
-//                        focusRequestTrigger?.apply {
-//                            if (!requestAEIdle) {
-//                                requestAEIdle = true
-//                                markFocusRequestTriggerUpdate = true
-//                            }
-//                        }
-//                    }
-                }
-//            if (markFocusRequestTriggerUpdate) {
-//                val nextTrigger = focusRequestTrigger?.copy(timestamp = System.currentTimeMillis())
-//                Log.i(TAG, "onCaptureCompleted: focusRequestTriggerFlow $nextTrigger")
-//                mViewModel.focusRequestTriggerFlow.value = nextTrigger
-//            }
-
-
-            result.get(CaptureResult.CONTROL_AE_REGIONS)
-                ?.let {
-                    mViewModel.previewAERegions.value = it.toList()
-                }
-
-            result.get(CaptureResult.CONTROL_AWB_STATE)
-                ?.let {
-                    mViewModel.previewAWBState.value = it
-                }
-            result.get(CaptureResult.CONTROL_AWB_REGIONS)
-                ?.let {
-                    mViewModel.previewAWBRegions.value = it.toList()
-                }
-
-            result.get(CaptureResult.STATISTICS_FACES)
-                ?.let {
-                    mViewModel.previewFaceDetectResult.clear()
-                    mViewModel.previewFaceDetectResult.addAll(it.toList())
-                }
+            mViewModel.captureResultFlow.value = result
         }
     }
 
@@ -642,6 +531,7 @@ class CameraActivity : ComponentActivity(), CoroutineScope by MainScope() {
                     else -> TEX_VERTEX_MAT_BACK_90
                 }
             }
+            cameraSurfaceRender.currentYuvData = null
             cameraSurfaceRender.updateTextureBuffer(nextTextureVertex)
         }
     }
@@ -657,38 +547,18 @@ class CameraActivity : ComponentActivity(), CoroutineScope by MainScope() {
         val surfaceList = mutableListOf<Surface>()
 
         if (outputItem != null) {
-            val imageReader = ImageReader.newInstance(
+            imageOutputReader?.close()
+            imageOutputReader = ImageReader.newInstance(
                 outputItem.bestSize.width,
                 outputItem.bestSize.height,
                 outputItem.outputMode.imageFormat,
                 2
             )
-            surfaceList.add(imageReader.surface)
-            when (outputItem.outputMode) {
-                OutputMode.JPEG -> {
-                    imageJpegReader = imageReader
-                    imageJpegReader!!.setOnImageAvailableListener(
-                        jpegImageAvailableListener,
-                        handler
-                    )
-                }
-
-                OutputMode.HEIC -> {
-                    imageHeicReader = imageReader
-                    imageHeicReader!!.setOnImageAvailableListener(
-                        heicImageAvailableListener,
-                        handler
-                    )
-                }
-
-                OutputMode.RAW -> {
-                    imageRawReader = imageReader
-                    imageRawReader!!.setOnImageAvailableListener(
-                        rawImageAvailableListener,
-                        handler
-                    )
-                }
-            }
+            imageOutputReader!!.setOnImageAvailableListener(
+                outputImageAvailableListener,
+                handler
+            )
+            surfaceList.add(imageOutputReader!!.surface)
         }
 
         val outputSizeList = scaleStreamConfigurationMap?.getOutputSizes(ImageFormat.YUV_420_888)
@@ -698,6 +568,7 @@ class CameraActivity : ComponentActivity(), CoroutineScope by MainScope() {
         }
         if (bestPreviewSize != null) {
             Log.i(TAG, "startPreview: bestPreviewSize $bestPreviewSize")
+            imagePreviewReader?.close()
             imagePreviewReader = ImageReader.newInstance(
                 bestPreviewSize.width,
                 bestPreviewSize.height,
@@ -725,8 +596,10 @@ class CameraActivity : ComponentActivity(), CoroutineScope by MainScope() {
         return storageFile
     }
 
-    private val jpegImageAvailableListener = ImageReader.OnImageAvailableListener { reader ->
+    private val outputImageAvailableListener = ImageReader.OnImageAvailableListener { reader ->
+        Log.i(TAG, "image: OnImageAvailableListener")
         val image = reader.acquireNextImage()
+        var outputFile: File? = null
         if (image.format == ImageFormat.JPEG || image.format == ImageFormat.DEPTH_JPEG) {
             var fos: FileOutputStream? = null
             try {
@@ -739,19 +612,14 @@ class CameraActivity : ComponentActivity(), CoroutineScope by MainScope() {
                 fos = FileOutputStream(file)
                 fos.write(bytes)
                 fos.flush()
+                outputFile = file
                 Log.i(TAG, "image: jpeg -> successful")
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {
                 fos?.close()
             }
-        }
-        image.close()
-    }
-
-    private val heicImageAvailableListener = ImageReader.OnImageAvailableListener { reader ->
-        val image = reader.acquireNextImage()
-        if (image.format == ImageFormat.HEIC) {
+        } else if (image.format == ImageFormat.HEIC) {
             var fos: FileOutputStream? = null
             try {
                 val byteBuffer = image.planes[0].buffer
@@ -763,27 +631,21 @@ class CameraActivity : ComponentActivity(), CoroutineScope by MainScope() {
                 fos = FileOutputStream(file)
                 fos.write(bytes)
                 fos.flush()
+                outputFile = file
                 Log.i(TAG, "image: heic -> successful")
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {
                 fos?.close()
             }
-        }
-        image.close()
-    }
-
-    private val rawImageAvailableListener = ImageReader.OnImageAvailableListener { reader ->
-        val cameraPair = mViewModel.currentCameraPairFlow.value
-        val cameraCharacteristics = cameraPair?.second ?: return@OnImageAvailableListener
-        val image = reader.acquireNextImage()
-        if (image.format == ImageFormat.RAW_SENSOR && captureResult != null) {
+        } else if (image.format == ImageFormat.RAW_SENSOR && captureResult != null) {
+            val cameraPair = mViewModel.currentCameraPairFlow.value
+            val cameraCharacteristics = cameraPair?.second ?: return@OnImageAvailableListener
             var fos: FileOutputStream? = null
             var dngCreator: DngCreator? = null
             try {
-                dngCreator = DngCreator(cameraCharacteristics, captureResult!!)
-                val folder = File(externalCacheDir, "dng")
-                if (!folder.exists()) folder.mkdirs()
+                dngCreator =
+                    DngCreator(cameraCharacteristics, captureResult!!)
                 val file = File(
                     getStoragePath(),
                     "YAO_${captureTimestamp ?: System.currentTimeMillis()}.dng"
@@ -791,6 +653,7 @@ class CameraActivity : ComponentActivity(), CoroutineScope by MainScope() {
                 fos = FileOutputStream(file)
                 dngCreator.writeImage(fos, image)
                 captureResult = null
+                outputFile = file
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {
@@ -798,6 +661,9 @@ class CameraActivity : ComponentActivity(), CoroutineScope by MainScope() {
                 fos?.close()
             }
             Log.i(TAG, "image: dng -> successful")
+        }
+        launch {
+            outputFileFlow.emit(outputFile)
         }
         image.close()
     }
@@ -838,7 +704,7 @@ class CameraActivity : ComponentActivity(), CoroutineScope by MainScope() {
                 )
 
             }
-            Log.i(TAG, "previewImageAvailableListener process frame time $time")
+//            Log.i(TAG, "previewImageAvailableListener process frame time $time")
             image.close()
         }
     }
@@ -868,10 +734,8 @@ class CameraActivity : ComponentActivity(), CoroutineScope by MainScope() {
     }
 
     private fun closeCamera() {
-        imageJpegReader?.close()
-        imageJpegReader = null
-        imageRawReader?.close()
-        imageRawReader = null
+        imageOutputReader?.close()
+        imageOutputReader = null
         cameraCaptureSessionFlow.value?.close()
         cameraCaptureSessionFlow.value = null
         cameraDeviceFlow.value?.close()
@@ -980,10 +844,7 @@ fun Camera2PreviewLayer(
                     }
             ) {
                 val focusPointRect = viewModel.focusPointRectFlow.collectAsState()
-                val previewAFState = viewModel.previewAFState
-                val previewAEState = viewModel.previewAEState
-                val previewAFRegions = viewModel.previewAFRegions
-                val previewAERegions = viewModel.previewAERegions
+                val captureResult = viewModel.captureResultFlow.collectAsState()
                 val sensorSize = viewModel.sensorSize
                 val sensorWidth = sensorSize.value.width()
                 val sensorHeight = sensorSize.value.height()
@@ -998,81 +859,83 @@ fun Camera2PreviewLayer(
                         )
                     }
 
-                    previewAFRegions.value?.forEach { meteringRectangle ->
-                        val rect = sensorDetectRect2ComposeRect(
-                            rect = meteringRectangle.rect,
-                            rotationOrientation = viewModel.rotationOrientation.value,
-                            cameraFacing = viewModel.cameraFacing.value,
-                            size = size,
-                            sensorWidth = sensorWidth,
-                            sensorHeight = sensorHeight,
-                        )
-                        drawRect(
-                            color = Color.Red,
-                            topLeft = rect.topLeft,
-                            size = rect.size,
-                            style = Stroke(width = 4F)
-                        )
-                        val circleSize = 16F
-                        drawCircle(
-                            color = when (previewAFState.value) {
-                                CameraMetadata.CONTROL_AF_STATE_ACTIVE_SCAN -> Color.White
-                                CameraMetadata.CONTROL_AF_STATE_FOCUSED_LOCKED -> Color.Green
-                                CameraMetadata.CONTROL_AF_STATE_NOT_FOCUSED_LOCKED -> Color.Red
-                                else -> Color.Gray
-                            },
-                            radius = circleSize,
-                            center = Offset(
-                                x = rect.right + circleSize,
-                                y = rect.top,
-                            ),
-                        )
-                    }
-                    previewAERegions.value?.forEach { meteringRectangle ->
-                        val rect = sensorDetectRect2ComposeRect(
-                            rect = meteringRectangle.rect,
-                            rotationOrientation = viewModel.rotationOrientation.value,
-                            cameraFacing = viewModel.cameraFacing.value,
-                            size = size,
-                            sensorWidth = sensorWidth,
-                            sensorHeight = sensorHeight,
-                        )
-                        drawRect(
-                            color = Color.Red,
-                            topLeft = rect.topLeft,
-                            size = rect.size,
-                            style = Stroke(width = 4F)
-                        )
-                        val circleSize = 16F
-                        Log.i("TAG", "Camera2PreviewLayer: previewAEState ${previewAEState.value}")
-                        drawCircle(
-                            color = when (previewAEState.value) {
-                                CameraMetadata.CONTROL_AE_STATE_PRECAPTURE -> Color.White
-                                CameraMetadata.CONTROL_AE_STATE_CONVERGED, CameraMetadata.CONTROL_AE_STATE_FLASH_REQUIRED -> Color.Green
-                                else -> Color.Gray
-                            },
-                            radius = circleSize,
-                            center = Offset(
-                                x = rect.right + circleSize,
-                                y = rect.bottom,
-                            ),
-                        )
-                    }
-                    viewModel.previewFaceDetectResult.forEach {
-                        val faceRect = sensorDetectRect2ComposeRect(
-                            rect = it.bounds,
-                            rotationOrientation = viewModel.rotationOrientation.value,
-                            cameraFacing = viewModel.cameraFacing.value,
-                            size = size,
-                            sensorWidth = sensorWidth,
-                            sensorHeight = sensorHeight,
-                        )
-                        drawRect(
-                            color = Color.Cyan,
-                            topLeft = faceRect.topLeft,
-                            size = faceRect.size,
-                            style = Stroke(width = 10F)
-                        )
+                    captureResult.value?.apply {
+                        afRegions?.forEach { meteringRectangle ->
+                            val rect = sensorDetectRect2ComposeRect(
+                                rect = meteringRectangle.rect,
+                                rotationOrientation = viewModel.rotationOrientation.value,
+                                cameraFacing = viewModel.cameraFacing.value,
+                                size = size,
+                                sensorWidth = sensorWidth,
+                                sensorHeight = sensorHeight,
+                            )
+                            drawRect(
+                                color = Color.Red,
+                                topLeft = rect.topLeft,
+                                size = rect.size,
+                                style = Stroke(width = 4F)
+                            )
+                            val circleSize = 16F
+                            drawCircle(
+                                color = when (afState) {
+                                    CameraMetadata.CONTROL_AF_STATE_ACTIVE_SCAN -> Color.White
+                                    CameraMetadata.CONTROL_AF_STATE_FOCUSED_LOCKED -> Color.Green
+                                    CameraMetadata.CONTROL_AF_STATE_NOT_FOCUSED_LOCKED -> Color.Red
+                                    else -> Color.Gray
+                                },
+                                radius = circleSize,
+                                center = Offset(
+                                    x = rect.right + circleSize,
+                                    y = rect.top,
+                                ),
+                            )
+                        }
+                        aeRegions?.forEach { meteringRectangle ->
+                            val rect = sensorDetectRect2ComposeRect(
+                                rect = meteringRectangle.rect,
+                                rotationOrientation = viewModel.rotationOrientation.value,
+                                cameraFacing = viewModel.cameraFacing.value,
+                                size = size,
+                                sensorWidth = sensorWidth,
+                                sensorHeight = sensorHeight,
+                            )
+                            drawRect(
+                                color = Color.Red,
+                                topLeft = rect.topLeft,
+                                size = rect.size,
+                                style = Stroke(width = 4F)
+                            )
+                            val circleSize = 16F
+                            Log.i("TAG", "Camera2PreviewLayer: previewAEState $aeState")
+                            drawCircle(
+                                color = when (aeState) {
+                                    CameraMetadata.CONTROL_AE_STATE_PRECAPTURE -> Color.White
+                                    CameraMetadata.CONTROL_AE_STATE_CONVERGED, CameraMetadata.CONTROL_AE_STATE_FLASH_REQUIRED -> Color.Green
+                                    else -> Color.Gray
+                                },
+                                radius = circleSize,
+                                center = Offset(
+                                    x = rect.right + circleSize,
+                                    y = rect.bottom,
+                                ),
+                            )
+                        }
+                        faceDetectResult?.forEach {
+                            val faceRect = sensorDetectRect2ComposeRect(
+                                rect = it.bounds,
+                                rotationOrientation = viewModel.rotationOrientation.value,
+                                cameraFacing = viewModel.cameraFacing.value,
+                                size = size,
+                                sensorWidth = sensorWidth,
+                                sensorHeight = sensorHeight,
+                            )
+                            drawRect(
+                                color = Color.Cyan,
+                                topLeft = faceRect.topLeft,
+                                size = faceRect.size,
+                                style = Stroke(width = 10F)
+                            )
+                        }
                     }
                 }
             }
@@ -1100,11 +963,12 @@ fun Camera2InfoLayer() {
                 fontSize = Layout.fontSize.fl,
                 fontWeight = FontWeight.Bold
             )
-            Text(text = "曝光时间：${viewModel.sensorExposureTime.value}")
-            Text(text = "感光度：${viewModel.sensorSensitivity.value}")
-            Text(text = "电子变焦：${viewModel.previewZoomRatio.value}")
-            Text(text = "场景模式：${viewModel.previewSceneMode.value}")
-            Text(text = "OIS：${viewModel.previewOisEnable.value}")
+            val captureResult = viewModel.captureResultFlow.collectAsState()
+            Text(text = "曝光时间：${captureResult.value?.sensorExposureTime}")
+            Text(text = "感光度：${captureResult.value?.sensorSensitivity}")
+            Text(text = "电子变焦：${captureResult.value?.zoomRatio}")
+            Text(text = "场景模式：${SceneMode.getByCode(captureResult.value?.sceneMode ?: -1)}")
+            Text(text = "OIS：${captureResult.value?.oisEnable}")
         }
 
         Column(
@@ -1484,7 +1348,8 @@ fun CameraSeaLevel() {
         )
 
         val gravity = viewModel.gravityFlow.collectAsState()
-        val gravityDegreesAnimation = animateRotationAsState(targetValue = gravity.value - viewModel.displayRotation.value)
+        val gravityDegreesAnimation =
+            animateRotationAsState(targetValue = gravity.value - viewModel.displayRotation.value)
         val pitch = viewModel.pitchFlow.collectAsState()
         val roll = viewModel.rollFlow.collectAsState()
         val pitchAnimation = animateFloatAsState(targetValue = pitch.value)

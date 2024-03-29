@@ -7,7 +7,6 @@ import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraMetadata
 import android.hardware.camera2.CaptureRequest
 import android.hardware.camera2.CaptureResult
-import android.hardware.camera2.params.Face
 import android.hardware.camera2.params.MeteringRectangle
 import android.hardware.camera2.params.RggbChannelVector
 import android.os.Build
@@ -53,75 +52,6 @@ enum class OutputMode(
         imageFormat = ImageFormat.RAW_SENSOR,
     ),
     ;
-}
-
-enum class SceneMode(
-    val code: Int,
-) {
-    FACE_PRIORITY(
-        code = CameraCharacteristics.CONTROL_SCENE_MODE_FACE_PRIORITY,
-    ),
-    ACTION(
-        code = CameraCharacteristics.CONTROL_SCENE_MODE_ACTION,
-    ),
-    PORTRAIT(
-        code = CameraCharacteristics.CONTROL_SCENE_MODE_PORTRAIT,
-    ),
-    LANDSCAPE(
-        code = CameraCharacteristics.CONTROL_SCENE_MODE_LANDSCAPE,
-    ),
-    NIGHT(
-        code = CameraCharacteristics.CONTROL_SCENE_MODE_NIGHT,
-    ),
-    NIGHT_PORTRAIT(
-        code = CameraCharacteristics.CONTROL_SCENE_MODE_NIGHT_PORTRAIT,
-    ),
-    THEATRE(
-        code = CameraCharacteristics.CONTROL_SCENE_MODE_THEATRE,
-    ),
-    BEACH(
-        code = CameraCharacteristics.CONTROL_SCENE_MODE_BEACH,
-    ),
-    SNOW(
-        code = CameraCharacteristics.CONTROL_SCENE_MODE_SNOW,
-    ),
-    SUNSET(
-        code = CameraCharacteristics.CONTROL_SCENE_MODE_SUNSET,
-    ),
-    STEADYPHOTO(
-        code = CameraCharacteristics.CONTROL_SCENE_MODE_STEADYPHOTO,
-    ),
-    FIREWORKS(
-        code = CameraCharacteristics.CONTROL_SCENE_MODE_FIREWORKS,
-    ),
-    SPORTS(
-        code = CameraCharacteristics.CONTROL_SCENE_MODE_SPORTS,
-    ),
-    PARTY(
-        code = CameraCharacteristics.CONTROL_SCENE_MODE_PARTY,
-    ),
-    CANDLELIGHT(
-        code = CameraCharacteristics.CONTROL_SCENE_MODE_CANDLELIGHT,
-    ),
-    BARCODE(
-        code = CameraCharacteristics.CONTROL_SCENE_MODE_BARCODE,
-    ),
-    HIGH_SPEED_VIDEO(
-        code = CameraCharacteristics.CONTROL_SCENE_MODE_HIGH_SPEED_VIDEO,
-    ),
-    HDR(
-        code = CameraCharacteristics.CONTROL_SCENE_MODE_HDR,
-    ),
-    ;
-
-    companion object {
-        fun getByCode(code: Int): SceneMode? {
-            for (value in entries) {
-                if (value.code == code) return value
-            }
-            return null
-        }
-    }
 }
 
 data class OutputItem(
@@ -216,11 +146,27 @@ class CameraViewModel(
 
     private val TAG = CameraViewModel::class.java.name
 
+    /**
+     *
+     * 姿态传感器
+     *
+     */
+
     val gravityFlow = sensorUseCase.gravityFlow
 
     val pitchFlow = sensorUseCase.pitchFlow
     val rollFlow = sensorUseCase.rollFlow
     val yawFlow = sensorUseCase.yawFlow
+
+    fun startSensor() = sensorUseCase.start()
+
+    fun stopSensor() = sensorUseCase.stop()
+
+    /**
+     *
+     * 影响相机启动相关
+     *
+     */
 
     val imageAspectRatio = 4F.div(3F)
 
@@ -237,6 +183,14 @@ class CameraViewModel(
 
     val currentOutputItemFlow = MutableStateFlow<OutputItem?>(null)
 
+    val allPermissionGrantedFlow = MutableStateFlow(false)
+
+    /**
+     *
+     *
+     *
+     */
+
     val captureLoading = mutableStateOf(false)
 
     val rotationOrientation = mutableStateOf(0)
@@ -244,30 +198,6 @@ class CameraViewModel(
     val cameraFacing = mutableStateOf(CameraMetadata.LENS_FACING_BACK)
 
     val sensorSize = mutableStateOf(Rect(0, 0, 4000, 3000))
-
-    val sensorExposureTime = mutableStateOf(0L)
-
-    val sensorSensitivity = mutableStateOf(0)
-
-    val zoomRatioFlow = MutableStateFlow(1F)
-
-    val zoomRatioRange = mutableStateOf<Range<Float>?>(null)
-
-    val previewZoomRatio = mutableStateOf<Float?>(null)
-
-    val oisAvailable = mutableStateOf(false)
-
-    val oisEnableFlow = MutableStateFlow(false)
-
-    val previewOisEnable = mutableStateOf(false)
-
-    val sceneModeAvailableList = mutableStateListOf<SceneMode>()
-
-    val currentSceneModeFlow = MutableStateFlow<SceneMode?>(null)
-
-    val previewSceneMode = mutableStateOf<SceneMode?>(null)
-
-    val allPermissionGrantedFlow = MutableStateFlow(false)
 
     val captureModeFlow = MutableStateFlow(CaptureMode.MANUAL)
 
@@ -281,33 +211,13 @@ class CameraViewModel(
 
     val exposureHistogramEnableFlow = MutableStateFlow(true)
 
-    val focusPointRectFlow = MutableStateFlow<androidx.compose.ui.geometry.Rect?>(null)
+    /**
+     *
+     * 预览数据
+     *
+     */
 
-    val focusRequestTriggerFlow = MutableStateFlow<FocusRequestTrigger?>(null)
-
-    val focusRequestOrientation = mutableStateOf<FocusRequestOrientation?>(null)
-
-    val previewAFTrigger = mutableStateOf<Int?>(null)
-
-    val previewAETrigger = mutableStateOf<Int?>(null)
-
-    val previewAFState = mutableStateOf<Int?>(null)
-
-    val previewAEState = mutableStateOf<Int?>(null)
-
-    val previewAWBState = mutableStateOf<Int?>(null)
-
-    val previewAFRegions = mutableStateOf<List<MeteringRectangle>?>(null)
-
-    val previewAERegions = mutableStateOf<List<MeteringRectangle>?>(null)
-
-    val previewAWBRegions = mutableStateOf<List<MeteringRectangle>?>(null)
-
-    val availableFaceDetectModes = mutableStateListOf<FaceDetectMode>()
-
-    val currentFaceDetectModeFlow = MutableStateFlow<FaceDetectMode?>(null)
-
-    val previewFaceDetectResult = mutableStateListOf<Face>()
+    val captureResultFlow = MutableStateFlow<CaptureResult?>(null)
 
     fun fetchCurrentSupportedOutput(cameraCharacteristics: CameraCharacteristics) {
         val scaleStreamConfigurationMap = cameraCharacteristics.get(
@@ -473,6 +383,28 @@ class CameraViewModel(
     val sensorExposureTimeFlow = MutableStateFlow<Long?>(null)
 
     val customTemperatureFlow = MutableStateFlow<Int?>(null)
+
+    val zoomRatioFlow = MutableStateFlow(1F)
+
+    val zoomRatioRange = mutableStateOf<Range<Float>?>(null)
+
+    val oisAvailable = mutableStateOf(false)
+
+    val oisEnableFlow = MutableStateFlow(false)
+
+    val sceneModeAvailableList = mutableStateListOf<SceneMode>()
+
+    val currentSceneModeFlow = MutableStateFlow<SceneMode?>(null)
+
+    val focusPointRectFlow = MutableStateFlow<androidx.compose.ui.geometry.Rect?>(null)
+
+    val focusRequestTriggerFlow = MutableStateFlow<FocusRequestTrigger?>(null)
+
+    val focusRequestOrientation = mutableStateOf<FocusRequestOrientation?>(null)
+
+    val availableFaceDetectModes = mutableStateListOf<FaceDetectMode>()
+
+    val currentFaceDetectModeFlow = MutableStateFlow<FaceDetectMode?>(null)
 
     val manualSensorParamsFlow = combine(
         listOf(
@@ -681,10 +613,6 @@ class CameraViewModel(
         )
         Log.i(TAG, "focusCancel: 取消对焦～")
     }
-
-    fun startSensor() = sensorUseCase.start()
-
-    fun stopSensor() = sensorUseCase.stop()
 
 }
 
