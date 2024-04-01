@@ -30,7 +30,7 @@ import kotlin.properties.Delegates
  * @create: 2024-02-24 23:09
  **/
 
-val TEX_VERTEX_MAT_BACK_0 = floatArrayOf(
+val TEX_VERTEX_MAT_0 = floatArrayOf(
     0.5f, 0.5f, //纹理坐标V0
     1f, 0f,     //纹理坐标V4
     0f, 0f,     //纹理坐标V1
@@ -38,7 +38,7 @@ val TEX_VERTEX_MAT_BACK_0 = floatArrayOf(
     1f, 1.0f,    //纹理坐标V3
 )
 
-val TEX_VERTEX_MAT_BACK_90 = floatArrayOf(
+val TEX_VERTEX_MAT_90 = floatArrayOf(
     0.5f, 0.5f, //纹理坐标V0
     0f, 0f,     //纹理坐标V1
     0f, 1.0f,   //纹理坐标V2
@@ -46,7 +46,7 @@ val TEX_VERTEX_MAT_BACK_90 = floatArrayOf(
     1f, 0f,     //纹理坐标V4
 )
 
-val TEX_VERTEX_MAT_BACK_180 = floatArrayOf(
+val TEX_VERTEX_MAT_180 = floatArrayOf(
     0.5f, 0.5f, //纹理坐标V0
     0f, 1.0f,   //纹理坐标V2
     1f, 1.0f,    //纹理坐标V3
@@ -54,7 +54,7 @@ val TEX_VERTEX_MAT_BACK_180 = floatArrayOf(
     0f, 0f,     //纹理坐标V1
 )
 
-val TEX_VERTEX_MAT_BACK_270 = floatArrayOf(
+val TEX_VERTEX_MAT_270 = floatArrayOf(
     0.5f, 0.5f, //纹理坐标V0
     1f, 1.0f,    //纹理坐标V3
     1f, 0f,     //纹理坐标V4
@@ -62,37 +62,23 @@ val TEX_VERTEX_MAT_BACK_270 = floatArrayOf(
     0f, 1.0f,   //纹理坐标V2
 )
 
-val TEX_VERTEX_MAT_FRONT_0 = floatArrayOf(
-    0.5f, 0.5f, //纹理坐标V0
-    0f, 0f,     //纹理坐标V4
-    1f, 0f,     //纹理坐标V1
-    1f, 1.0f,    //纹理坐标V2
-    0f, 1.0f,   //纹理坐标V3
-)
+fun vertexHorizontalFlip(vertexArray: FloatArray): FloatArray {
+    val nextVertex = vertexArray.clone()
+    var temp01 = nextVertex[2]
+    var temp02 = nextVertex[3]
+    nextVertex[2] = nextVertex[4]
+    nextVertex[3] = nextVertex[5]
+    nextVertex[4] = temp01
+    nextVertex[5] = temp02
 
-val TEX_VERTEX_MAT_FRONT_90 = floatArrayOf(
-    0.5f, 0.5f, //纹理坐标V0
-    1f, 0f,     //纹理坐标V1
-    1f, 1.0f,    //纹理坐标V2
-    0f, 1.0f,   //纹理坐标V3
-    0f, 0f,     //纹理坐标V4
-)
-
-val TEX_VERTEX_MAT_FRONT_180 = floatArrayOf(
-    0.5f, 0.5f, //纹理坐标V0
-    1f, 1.0f,    //纹理坐标V2
-    0f, 1.0f,   //纹理坐标V3
-    0f, 0f,     //纹理坐标V4
-    1f, 0f,     //纹理坐标V1
-)
-
-val TEX_VERTEX_MAT_FRONT_270 = floatArrayOf(
-    0.5f, 0.5f, //纹理坐标V0
-    0f, 1.0f,   //纹理坐标V3
-    0f, 0f,     //纹理坐标V4
-    1f, 0f,     //纹理坐标V1
-    1f, 1.0f,    //纹理坐标V2
-)
+    temp01 = nextVertex[6]
+    temp02 = nextVertex[7]
+    nextVertex[6] = nextVertex[8]
+    nextVertex[7] = nextVertex[9]
+    nextVertex[8] = temp01
+    nextVertex[9] = temp02
+    return nextVertex
+}
 
 data class YUVRenderData(
     val width: Int,

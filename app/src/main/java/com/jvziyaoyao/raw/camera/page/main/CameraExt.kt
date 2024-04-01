@@ -192,7 +192,7 @@ fun getSizeByAspectRatio(outputSizeList: Array<Size>, targetAspectRatio: Float):
     return outputSizeList.toList().stream().filter { size ->
         val aspectRatio = size.width.toFloat() / size.height.toFloat()
         val aspectRatioDiff = abs(aspectRatio - targetAspectRatio)
-        aspectRatioDiff == 0F
+        aspectRatioDiff <= 0.1F
     }.collect(Collectors.toList())
 }
 
@@ -230,48 +230,28 @@ fun configureTransform(displayOrientation: Int, width: Int, height: Int): Matrix
 fun calculateOrientationOffsetToSensor(
     point: Pair<Float, Float>,
     orientation: Int,
-    cameraFacing: Int,
 ): Pair<Float, Float> {
     val x = point.first
     val y = point.second
-    return if (cameraFacing == CameraMetadata.LENS_FACING_FRONT) {
-        when (orientation) {
-            90 -> Pair(1 - y, 1 - x)
-            180 -> Pair(x, 1 - y)
-            270 -> Pair(y, x)
-            else -> Pair(1 - x, y)
-        }
-    } else {
-        when (orientation) {
-            90 -> Pair(y, 1 - x)
-            180 -> Pair(1 - x, 1 - y)
-            270 -> Pair(1 - y, x)
-            else -> point
-        }
+    return when (orientation) {
+        90 -> Pair(y, 1 - x)
+        180 -> Pair(1 - x, 1 - y)
+        270 -> Pair(1 - y, x)
+        else -> point
     }
 }
 
 fun calculateOrientationOffsetFromSensor(
     point: Pair<Float, Float>,
     orientation: Int,
-    cameraFacing: Int,
 ): Pair<Float, Float> {
     val x = point.first
     val y = point.second
-    return if (cameraFacing == CameraMetadata.LENS_FACING_FRONT) {
-        when (orientation) {
-            90 -> Pair(1 - y, 1 - x)
-            180 -> Pair(x, 1 - y)
-            270 -> Pair(y, x)
-            else -> Pair(1 - x, y)
-        }
-    } else {
-        when (orientation) {
-            90 -> Pair(1 - y, x)
-            180 -> Pair(1 - x, 1 - y)
-            270 -> Pair(y, 1 - x)
-            else -> point
-        }
+    return when (orientation) {
+        90 -> Pair(1 - y, x)
+        180 -> Pair(1 - x, 1 - y)
+        270 -> Pair(y, 1 - x)
+        else -> point
     }
 }
 
@@ -333,19 +313,23 @@ fun rectFromNormalized(
 fun composeRect2SensorRect(
     rect: Rect,
     rotationOrientation: Int,
-    cameraFacing: Int,
+    flipHorizontal: Boolean,
     sensorWidth: Int,
     sensorHeight: Int,
 ): android.graphics.Rect {
+    var pair01 = Pair(rect.left, rect.top)
+    var pair02 = Pair(rect.right, rect.bottom)
+    if (flipHorizontal) {
+        pair01 = pair01.copy(first = 1 - pair01.first)
+        pair02 = pair02.copy(first = 1 - pair02.first)
+    }
     val point01 = calculateOrientationOffsetToSensor(
-        point = Pair(rect.left, rect.top),
+        point = pair01,
         orientation = rotationOrientation,
-        cameraFacing = cameraFacing,
     )
     val point02 = calculateOrientationOffsetToSensor(
-        point = Pair(rect.right, rect.bottom),
+        point = pair02,
         orientation = rotationOrientation,
-        cameraFacing = cameraFacing,
     )
     val l01 = point01.first.times(sensorWidth).toInt()
     val l02 = point02.first.times(sensorWidth).toInt()
@@ -361,7 +345,7 @@ fun composeRect2SensorRect(
 fun sensorDetectRect2ComposeRect(
     rect: android.graphics.Rect,
     rotationOrientation: Int,
-    cameraFacing: Int,
+    flipHorizontal: Boolean,
     size: androidx.compose.ui.geometry.Size,
     sensorWidth: Int,
     sensorHeight: Int,
@@ -370,17 +354,18 @@ fun sensorDetectRect2ComposeRect(
     val rectTop = rect.top.toFloat().div(sensorHeight)
     val rectRight = rect.right.toFloat().div(sensorWidth)
     val rectBottom = rect.bottom.toFloat().div(sensorHeight)
-    val point01 = calculateOrientationOffsetFromSensor(
+    var point01 = calculateOrientationOffsetFromSensor(
         point = Pair(rectLeft, rectTop),
         orientation = rotationOrientation,
-        cameraFacing = cameraFacing,
     )
-    val point02 = calculateOrientationOffsetFromSensor(
+    var point02 = calculateOrientationOffsetFromSensor(
         point = Pair(rectRight, rectBottom),
         orientation = rotationOrientation,
-        cameraFacing = cameraFacing,
     )
-
+    if (flipHorizontal) {
+        point01 = point01.copy(first = 1 - point01.first)
+        point02 = point02.copy(first = 1 - point02.first)
+    }
     val l01 = point01.first.times(size.width)
     val l02 = point02.first.times(size.width)
     val t01 = point01.second.times(size.height)

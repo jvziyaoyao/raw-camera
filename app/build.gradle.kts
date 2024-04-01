@@ -51,6 +51,7 @@ android {
 
 dependencies {
     implementation("org.opencv:opencv:4.9.0")
+    implementation("androidx.exifinterface:exifinterface:1.3.7")
 
     // Koin for Kotlin apps
     val koin_version = "3.4.2"

@@ -79,6 +79,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.exifinterface.media.ExifInterface
 import com.jvziyaoyao.raw.camera.ui.base.CommonPermissions
 import com.jvziyaoyao.raw.camera.ui.base.animateRotationAsState
 import com.jvziyaoyao.raw.camera.ui.theme.Layout
@@ -87,6 +88,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -131,7 +134,7 @@ class CameraActivity : ComponentActivity(), CoroutineScope by MainScope() {
 
     private var surfaceFlow = MutableStateFlow<Surface?>(null)
 
-    private val cameraSurfaceRender = CameraSurfaceRenderer(TEX_VERTEX_MAT_BACK_0)
+    private val cameraSurfaceRender = CameraSurfaceRenderer(TEX_VERTEX_MAT_0)
 
     private var imageOutputReader: ImageReader? = null
 
@@ -262,7 +265,6 @@ class CameraActivity : ComponentActivity(), CoroutineScope by MainScope() {
                 val currentOutputItem = t.second
                 val cameraPair = t.third
                 val cameraCharacteristics = cameraPair?.second
-                val imageAspectRatio = mViewModel.imageAspectRatio
                 val cameraId = cameraPair?.first
                 if (
                     cameraDevice != null
@@ -273,7 +275,6 @@ class CameraActivity : ComponentActivity(), CoroutineScope by MainScope() {
                         cameraDevice,
                         cameraCharacteristics,
                         currentOutputItem,
-                        imageAspectRatio,
                     )
                 }
             }
@@ -476,12 +477,21 @@ class CameraActivity : ComponentActivity(), CoroutineScope by MainScope() {
                     if (outputItem != null) {
                         imageOutputReader?.apply { addTarget(surface) }
                     }
+                    val rotationOrientation = mViewModel.rotationOrientation.value
+                    set(CaptureRequest.JPEG_ORIENTATION, rotationOrientation)
                     mViewModel.setCurrentCaptureParams(this)
                 }.build()
         captureTimestamp = System.currentTimeMillis()
-        captureResult = cameraCaptureSessionFlow.value?.captureAsync(cameraCaptureRequest, handler)
-        outputFileFlow.takeWhile { it != null }.first()
-        outputFileFlow.emit(null)
+        listOf(
+            async {
+                captureResult =
+                    cameraCaptureSessionFlow.value?.captureAsync(cameraCaptureRequest, handler)
+            },
+            async {
+                outputFileFlow.takeWhile { it != null }.first()
+                outputFileFlow.emit(null)
+            }
+        ).awaitAll()
     }
 
     private val previewCaptureCallback = object : CaptureCallback() {
@@ -497,40 +507,25 @@ class CameraActivity : ComponentActivity(), CoroutineScope by MainScope() {
 
     private fun setOrientation(cameraCharacteristics: CameraCharacteristics) {
         // 设置预览方向相关
-        val sensorSize =
-            cameraCharacteristics.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE)
-        val cameraFacing = cameraCharacteristics.get(CameraCharacteristics.LENS_FACING)
+        val sensorSize = cameraCharacteristics.sensorSize
+        val cameraFacing = cameraCharacteristics.cameraFacing
+        val isFrontCamera = cameraCharacteristics.isFrontCamera
         if (sensorSize != null && cameraFacing != null) {
-            val sensorOrientation =
-                cameraCharacteristics.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 90
-            val rotationOrientationResult = if (cameraFacing == CameraMetadata.LENS_FACING_FRONT) {
-                var result = (sensorOrientation + displayRotation) % 360
-                result = (360 - result) % 360
-                result
+            val sensorOrientation = cameraCharacteristics.sensorOrientation ?: 90
+            val rotationOrientationResult = if (isFrontCamera) {
+                (sensorOrientation + displayRotation) % 360
             } else {
                 (sensorOrientation - displayRotation + 360) % 360
             }
-            mViewModel.cameraFacing.value = cameraFacing
-            mViewModel.sensorSize.value = sensorSize
             mViewModel.rotationOrientation.value = rotationOrientationResult
-            Log.i(TAG, "setOrientation: rotationOrientationResult $rotationOrientationResult")
-            val nextTextureVertex = if (cameraFacing == CameraMetadata.LENS_FACING_FRONT) {
-                when (rotationOrientationResult) {
-                    0 -> TEX_VERTEX_MAT_FRONT_0
-                    90 -> TEX_VERTEX_MAT_FRONT_90
-                    180 -> TEX_VERTEX_MAT_FRONT_180
-                    270 -> TEX_VERTEX_MAT_FRONT_270
-                    else -> TEX_VERTEX_MAT_FRONT_90
-                }
-            } else {
-                when (rotationOrientationResult) {
-                    0 -> TEX_VERTEX_MAT_BACK_0
-                    90 -> TEX_VERTEX_MAT_BACK_90
-                    180 -> TEX_VERTEX_MAT_BACK_180
-                    270 -> TEX_VERTEX_MAT_BACK_270
-                    else -> TEX_VERTEX_MAT_BACK_90
-                }
+            var nextTextureVertex = when (rotationOrientationResult) {
+                0 -> TEX_VERTEX_MAT_0
+                90 -> TEX_VERTEX_MAT_90
+                180 -> TEX_VERTEX_MAT_180
+                270 -> TEX_VERTEX_MAT_270
+                else -> TEX_VERTEX_MAT_90
             }
+            if (isFrontCamera) nextTextureVertex = vertexHorizontalFlip(nextTextureVertex)
             cameraSurfaceRender.currentYuvData = null
             cameraSurfaceRender.updateTextureBuffer(nextTextureVertex)
         }
@@ -540,10 +535,9 @@ class CameraActivity : ComponentActivity(), CoroutineScope by MainScope() {
         cameraDevice: CameraDevice,
         cameraCharacteristics: CameraCharacteristics,
         outputItem: OutputItem?,
-        imageAspectRatio: Float,
     ) {
-        val scaleStreamConfigurationMap =
-            cameraCharacteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+        val scaleStreamConfigurationMap = cameraCharacteristics.scaleStreamMap
+        val sensorAspectRatio = cameraCharacteristics.sensorAspectRatio
         val surfaceList = mutableListOf<Surface>()
 
         if (outputItem != null) {
@@ -563,7 +557,7 @@ class CameraActivity : ComponentActivity(), CoroutineScope by MainScope() {
 
         val outputSizeList = scaleStreamConfigurationMap?.getOutputSizes(ImageFormat.YUV_420_888)
         val bestPreviewSize = outputSizeList?.run {
-            val aspectList = getSizeByAspectRatio(this, imageAspectRatio)
+            val aspectList = getSizeByAspectRatio(this, sensorAspectRatio)
             return@run findBestSize(aspectList.toTypedArray(), 1280)
         }
         if (bestPreviewSize != null) {
@@ -580,12 +574,7 @@ class CameraActivity : ComponentActivity(), CoroutineScope by MainScope() {
             surfaceList.add(imagePreviewReader!!.surface)
         }
 
-        Log.i(TAG, "startPreview: $surfaceList")
         cameraCaptureSessionFlow.value = cameraDevice.createCameraSessionAsync(handler, surfaceList)
-        Log.i(
-            TAG,
-            "startPreview: cameraCaptureSession hashCode ${cameraCaptureSessionFlow.value.hashCode()}"
-        )
     }
 
     private fun getStoragePath(): File {
@@ -651,6 +640,15 @@ class CameraActivity : ComponentActivity(), CoroutineScope by MainScope() {
                     "YAO_${captureTimestamp ?: System.currentTimeMillis()}.dng"
                 )
                 fos = FileOutputStream(file)
+                val exifRotation = when (mViewModel.rotationOrientation.value) {
+                    90 -> ExifInterface.ORIENTATION_ROTATE_90
+                    180 -> ExifInterface.ORIENTATION_ROTATE_180
+                    270 -> ExifInterface.ORIENTATION_ROTATE_270
+                    else -> ExifInterface.ORIENTATION_NORMAL
+                }
+
+                // dng图片无法同时旋转和水平翻转
+                dngCreator.setOrientation(exifRotation)
                 dngCreator.writeImage(fos, image)
                 captureResult = null
                 outputFile = file
@@ -785,10 +783,13 @@ fun Camera2PreviewLayer(
     val viewModel: CameraViewModel = koinViewModel()
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val portrait = maxHeight > maxWidth
+        val currentCameraPair = viewModel.currentCameraPairFlow.collectAsState()
+        val cameraCharacteristics = currentCameraPair.value?.second
         Box(
             modifier = Modifier
                 .run {
-                    val imageAspectRatio = viewModel.imageAspectRatio
+                    val imageAspectRatio =
+                        cameraCharacteristics?.sensorAspectRatio ?: defaultSensorAspectRatio
                     if (portrait) {
                         fillMaxWidth()
                             .aspectRatio(1.div(imageAspectRatio))
@@ -843,98 +844,102 @@ fun Camera2PreviewLayer(
                         previewSize.value = it
                     }
             ) {
-                val focusPointRect = viewModel.focusPointRectFlow.collectAsState()
-                val captureResult = viewModel.captureResultFlow.collectAsState()
-                val sensorSize = viewModel.sensorSize
-                val sensorWidth = sensorSize.value.width()
-                val sensorHeight = sensorSize.value.height()
-                Canvas(modifier = Modifier.fillMaxSize()) {
-                    focusPointRect.value?.let { fPointRect ->
-                        val pointRect = rectFromNormalized(fPointRect, size.width, size.height)
-                        drawRect(
-                            color = Color.White,
-                            topLeft = pointRect.topLeft,
-                            size = pointRect.size,
-                            style = Stroke(width = 10F)
-                        )
-                    }
+                if (cameraCharacteristics != null) {
+                    val focusPointRect = viewModel.focusPointRectFlow.collectAsState()
+                    val captureResult = viewModel.captureResultFlow.collectAsState()
+                    val sensorSize = cameraCharacteristics.sensorSize
+                    if (sensorSize != null) {
+                        val sensorWidth = sensorSize.width()
+                        val sensorHeight = sensorSize.height()
+                        Canvas(modifier = Modifier.fillMaxSize()) {
+                            focusPointRect.value?.let { fPointRect ->
+                                val pointRect =
+                                    rectFromNormalized(fPointRect, size.width, size.height)
+                                drawRect(
+                                    color = Color.White,
+                                    topLeft = pointRect.topLeft,
+                                    size = pointRect.size,
+                                    style = Stroke(width = 10F)
+                                )
+                            }
 
-                    captureResult.value?.apply {
-                        afRegions?.forEach { meteringRectangle ->
-                            val rect = sensorDetectRect2ComposeRect(
-                                rect = meteringRectangle.rect,
-                                rotationOrientation = viewModel.rotationOrientation.value,
-                                cameraFacing = viewModel.cameraFacing.value,
-                                size = size,
-                                sensorWidth = sensorWidth,
-                                sensorHeight = sensorHeight,
-                            )
-                            drawRect(
-                                color = Color.Red,
-                                topLeft = rect.topLeft,
-                                size = rect.size,
-                                style = Stroke(width = 4F)
-                            )
-                            val circleSize = 16F
-                            drawCircle(
-                                color = when (afState) {
-                                    CameraMetadata.CONTROL_AF_STATE_ACTIVE_SCAN -> Color.White
-                                    CameraMetadata.CONTROL_AF_STATE_FOCUSED_LOCKED -> Color.Green
-                                    CameraMetadata.CONTROL_AF_STATE_NOT_FOCUSED_LOCKED -> Color.Red
-                                    else -> Color.Gray
-                                },
-                                radius = circleSize,
-                                center = Offset(
-                                    x = rect.right + circleSize,
-                                    y = rect.top,
-                                ),
-                            )
-                        }
-                        aeRegions?.forEach { meteringRectangle ->
-                            val rect = sensorDetectRect2ComposeRect(
-                                rect = meteringRectangle.rect,
-                                rotationOrientation = viewModel.rotationOrientation.value,
-                                cameraFacing = viewModel.cameraFacing.value,
-                                size = size,
-                                sensorWidth = sensorWidth,
-                                sensorHeight = sensorHeight,
-                            )
-                            drawRect(
-                                color = Color.Red,
-                                topLeft = rect.topLeft,
-                                size = rect.size,
-                                style = Stroke(width = 4F)
-                            )
-                            val circleSize = 16F
-                            Log.i("TAG", "Camera2PreviewLayer: previewAEState $aeState")
-                            drawCircle(
-                                color = when (aeState) {
-                                    CameraMetadata.CONTROL_AE_STATE_PRECAPTURE -> Color.White
-                                    CameraMetadata.CONTROL_AE_STATE_CONVERGED, CameraMetadata.CONTROL_AE_STATE_FLASH_REQUIRED -> Color.Green
-                                    else -> Color.Gray
-                                },
-                                radius = circleSize,
-                                center = Offset(
-                                    x = rect.right + circleSize,
-                                    y = rect.bottom,
-                                ),
-                            )
-                        }
-                        faceDetectResult?.forEach {
-                            val faceRect = sensorDetectRect2ComposeRect(
-                                rect = it.bounds,
-                                rotationOrientation = viewModel.rotationOrientation.value,
-                                cameraFacing = viewModel.cameraFacing.value,
-                                size = size,
-                                sensorWidth = sensorWidth,
-                                sensorHeight = sensorHeight,
-                            )
-                            drawRect(
-                                color = Color.Cyan,
-                                topLeft = faceRect.topLeft,
-                                size = faceRect.size,
-                                style = Stroke(width = 10F)
-                            )
+                            captureResult.value?.apply {
+                                afRegions?.forEach { meteringRectangle ->
+                                    val rect = sensorDetectRect2ComposeRect(
+                                        rect = meteringRectangle.rect,
+                                        rotationOrientation = viewModel.rotationOrientation.value,
+                                        flipHorizontal = cameraCharacteristics.isFrontCamera,
+                                        size = size,
+                                        sensorWidth = sensorWidth,
+                                        sensorHeight = sensorHeight,
+                                    )
+                                    drawRect(
+                                        color = Color.Red,
+                                        topLeft = rect.topLeft,
+                                        size = rect.size,
+                                        style = Stroke(width = 4F)
+                                    )
+                                    val circleSize = 16F
+                                    drawCircle(
+                                        color = when (afState) {
+                                            CameraMetadata.CONTROL_AF_STATE_ACTIVE_SCAN -> Color.White
+                                            CameraMetadata.CONTROL_AF_STATE_FOCUSED_LOCKED -> Color.Green
+                                            CameraMetadata.CONTROL_AF_STATE_NOT_FOCUSED_LOCKED -> Color.Red
+                                            else -> Color.Gray
+                                        },
+                                        radius = circleSize,
+                                        center = Offset(
+                                            x = rect.right + circleSize,
+                                            y = rect.top,
+                                        ),
+                                    )
+                                }
+                                aeRegions?.forEach { meteringRectangle ->
+                                    val rect = sensorDetectRect2ComposeRect(
+                                        rect = meteringRectangle.rect,
+                                        rotationOrientation = viewModel.rotationOrientation.value,
+                                        flipHorizontal = cameraCharacteristics.isFrontCamera,
+                                        size = size,
+                                        sensorWidth = sensorWidth,
+                                        sensorHeight = sensorHeight,
+                                    )
+                                    drawRect(
+                                        color = Color.Red,
+                                        topLeft = rect.topLeft,
+                                        size = rect.size,
+                                        style = Stroke(width = 4F)
+                                    )
+                                    val circleSize = 16F
+                                    drawCircle(
+                                        color = when (aeState) {
+                                            CameraMetadata.CONTROL_AE_STATE_PRECAPTURE -> Color.White
+                                            CameraMetadata.CONTROL_AE_STATE_CONVERGED, CameraMetadata.CONTROL_AE_STATE_FLASH_REQUIRED -> Color.Green
+                                            else -> Color.Gray
+                                        },
+                                        radius = circleSize,
+                                        center = Offset(
+                                            x = rect.right + circleSize,
+                                            y = rect.bottom,
+                                        ),
+                                    )
+                                }
+                                faceDetectResult?.forEach {
+                                    val faceRect = sensorDetectRect2ComposeRect(
+                                        rect = it.bounds,
+                                        rotationOrientation = viewModel.rotationOrientation.value,
+                                        flipHorizontal = cameraCharacteristics.isFrontCamera,
+                                        size = size,
+                                        sensorWidth = sensorWidth,
+                                        sensorHeight = sensorHeight,
+                                    )
+                                    drawRect(
+                                        color = Color.Cyan,
+                                        topLeft = faceRect.topLeft,
+                                        size = faceRect.size,
+                                        style = Stroke(width = 10F)
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -1056,272 +1061,289 @@ fun Camera2ActionLayer(
                 }
             }
 
-            val outputItemList = viewModel.outputSupportedItemList
-            val currentOutputItem = viewModel.currentOutputItemFlow.collectAsState()
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(text = "输出格式：")
-                Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                    outputItemList.forEach { outputItem ->
-                        val enable = currentOutputItem.value == outputItem
-                        Button(
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (enable) MaterialTheme.colorScheme.error
-                                else MaterialTheme.colorScheme.primary
-                            ),
-                            onClick = {
-                                viewModel.currentOutputItemFlow.value = outputItem
+            val currentCameraPair = viewModel.currentCameraPairFlow.collectAsState()
+            val cameraCharacteristics = currentCameraPair.value?.second
+            if (cameraCharacteristics != null) {
+                val outputItemList = cameraCharacteristics.outputSupportedMode
+                val currentOutputItem = viewModel.currentOutputItemFlow.collectAsState()
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(text = "输出格式：")
+                    Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                        outputItemList.forEach { outputItem ->
+                            val enable = currentOutputItem.value == outputItem
+                            Button(
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (enable) MaterialTheme.colorScheme.error
+                                    else MaterialTheme.colorScheme.primary
+                                ),
+                                onClick = {
+                                    viewModel.currentOutputItemFlow.value = outputItem
+                                }
+                            ) {
+                                Column {
+                                    Text(text = outputItem.outputMode.label)
+                                    Text(
+                                        text = outputItem.bestSize.run { "${width}x${height}" },
+                                        fontSize = 10.sp
+                                    )
+                                }
                             }
-                        ) {
-                            Column {
-                                Text(text = outputItem.outputMode.label)
-                                Text(
-                                    text = outputItem.bestSize.run { "${width}x${height}" },
-                                    fontSize = 10.sp
+                        }
+                    }
+                }
+
+                val captureMode = viewModel.captureModeFlow.collectAsState()
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(text = "拍照模式：")
+                    for (mode in CaptureMode.entries) {
+                        Button(enabled = captureMode.value != mode, onClick = {
+                            viewModel.captureModeFlow.value = mode
+                        }) {
+                            Text(text = mode.name)
+                        }
+                    }
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(text = "辅助：")
+                    Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                        val focusPeakingEnable = viewModel.focusPeakingEnableFlow.collectAsState()
+                        EnableButton(
+                            enable = focusPeakingEnable.value,
+                            label = "峰值对焦",
+                            onClick = { viewModel.focusPeakingEnableFlow.apply { value = !value } }
+                        )
+                        val brightnessPeakingEnable =
+                            viewModel.brightnessPeakingEnableFlow.collectAsState()
+                        EnableButton(
+                            enable = brightnessPeakingEnable.value,
+                            label = "峰值亮度",
+                            onClick = {
+                                viewModel.brightnessPeakingEnableFlow.apply {
+                                    value = !value
+                                }
+                            }
+                        )
+                        val exposureHistogramEnable =
+                            viewModel.exposureHistogramEnableFlow.collectAsState()
+                        EnableButton(
+                            enable = exposureHistogramEnable.value,
+                            label = "直方图",
+                            onClick = {
+                                viewModel.exposureHistogramEnableFlow.apply {
+                                    value = !value
+                                }
+                            }
+                        )
+                    }
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(text = "场景模式：")
+                    Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                        val currentSceneMode = viewModel.currentSceneModeFlow.collectAsState()
+                        EnableButton(
+                            enable = currentSceneMode.value == null,
+                            label = "无",
+                            onClick = { viewModel.currentSceneModeFlow.value = null }
+                        )
+                        cameraCharacteristics.sceneModes.forEach { sceneMode ->
+                            EnableButton(
+                                enable = currentSceneMode.value == sceneMode,
+                                label = sceneMode.name,
+                                onClick = { viewModel.currentSceneModeFlow.value = sceneMode }
+                            )
+                        }
+                    }
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(text = "光学防抖：")
+                    Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                        val oisEnable = viewModel.oisEnableFlow.collectAsState()
+                        val oisAvailable = cameraCharacteristics.oisAvailable
+                        if (oisAvailable) {
+                            EnableButton(
+                                enable = oisEnable.value,
+                                label = "OIS",
+                                onClick = { viewModel.oisEnableFlow.apply { value = !value } }
+                            )
+                        } else {
+                            Button(onClick = { }, enabled = false) {
+                                Text(text = "无")
+                            }
+                        }
+                    }
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(text = "人脸识别：")
+                    Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                        val currentFaceDetectMode =
+                            viewModel.currentFaceDetectModeFlow.collectAsState()
+                        cameraCharacteristics.faceDetectModes.forEach { faceDetectMode ->
+                            EnableButton(
+                                enable = currentFaceDetectMode.value == faceDetectMode,
+                                label = faceDetectMode.label,
+                                onClick = {
+                                    viewModel.currentFaceDetectModeFlow.value = faceDetectMode
+                                }
+                            )
+                        }
+                    }
+                }
+
+                val zoomRatioRange = cameraCharacteristics.zoomRatioRange
+                if (zoomRatioRange != null) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(text = "电子变焦：")
+                        val zoomRatio = viewModel.zoomRatioFlow.collectAsState()
+                        Box(modifier = Modifier.width(80.dp)) {
+                            Text(text = "${zoomRatio.value}/${zoomRatioRange.upper}")
+                        }
+                        Slider(
+                            valueRange = zoomRatioRange.run { lower.toFloat()..upper.toFloat() },
+                            value = zoomRatio.value,
+                            onValueChange = {
+                                viewModel.zoomRatioFlow.value = it
+                            },
+                        )
+                    }
+                }
+
+                Column(modifier = Modifier.animateContentSize()) {
+                    if (captureMode.value == CaptureMode.MANUAL) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(text = "手动控制：")
+
+                            Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                                val afEnable = viewModel.afEnableFlow.collectAsState(initial = true)
+                                EnableButton(
+                                    enable = afEnable.value,
+                                    label = "AF",
+                                    onClick = { viewModel.setAfEnable() })
+
+                                val aeEnable = viewModel.aeEnableFlow.collectAsState(initial = true)
+                                EnableButton(
+                                    enable = aeEnable.value,
+                                    label = "AE",
+                                    onClick = { viewModel.setAeEnable() })
+
+                                val awbEnable =
+                                    viewModel.awbEnableFlow.collectAsState(initial = true)
+                                EnableButton(
+                                    enable = awbEnable.value,
+                                    label = "AWB",
+                                    onClick = { viewModel.setAwbEnable() }
+                                )
+                            }
+                        }
+
+                        val focalDistanceRange = cameraCharacteristics.focalDistanceRange
+                        val focalDistance = viewModel.focalDistanceFlow.collectAsState()
+                        if (focalDistanceRange != null) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(text = "对焦距离：")
+                                Box(modifier = Modifier.width(80.dp)) {
+                                    Text(text = "${focalDistance.value}/${focalDistanceRange.upper}")
+                                }
+                                Slider(
+                                    valueRange = focalDistanceRange.run { lower.toFloat()..upper.toFloat() },
+                                    value = focalDistance.value
+                                        ?: focalDistanceRange.lower.toFloat(),
+                                    onValueChange = {
+                                        viewModel.focalDistanceFlow.value = it
+                                    },
+                                )
+                            }
+                        }
+
+                        val sensorSensitivityRange = cameraCharacteristics.sensorSensitivityRange
+                        val sensorSensitivity = viewModel.sensorSensitivityFlow.collectAsState()
+                        if (sensorSensitivityRange != null) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(text = "感光度：")
+                                Box(modifier = Modifier.width(80.dp)) {
+                                    Text(text = "${sensorSensitivity.value}/${sensorSensitivityRange.upper}")
+                                }
+                                Slider(
+                                    valueRange = sensorSensitivityRange.run { lower.toFloat()..upper.toFloat() },
+                                    value = sensorSensitivity.value?.toFloat()
+                                        ?: sensorSensitivityRange.lower.toFloat(),
+                                    onValueChange = {
+                                        viewModel.sensorSensitivityFlow.value = it.toInt()
+                                    },
+                                )
+                            }
+                        }
+
+                        val sensorExposureTime = viewModel.sensorExposureTimeFlow.collectAsState()
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(text = "曝光时间：")
+                            Row(
+                                modifier = Modifier
+                                    .weight(1F)
+                                    .horizontalScroll(rememberScrollState())
+                            ) {
+                                for (exposureTime in ExposureTime.entries) {
+                                    Button(
+                                        enabled = exposureTime.time != sensorExposureTime.value,
+                                        onClick = {
+                                            viewModel.sensorExposureTimeFlow.value =
+                                                exposureTime.time
+                                        }
+                                    ) {
+                                        Text(text = exposureTime.label)
+                                    }
+                                }
+                            }
+                        }
+
+                        val customTemperature = viewModel.customTemperatureFlow.collectAsState()
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(text = "白平衡：")
+                            Box(modifier = Modifier.width(80.dp)) {
+                                Text(text = "${customTemperature.value}")
+                            }
+                            Slider(
+                                valueRange = 0F..100F,
+                                value = customTemperature.value?.toFloat() ?: 0F,
+                                onValueChange = {
+                                    viewModel.customTemperatureFlow.value = it.toInt()
+                                },
+                            )
+                        }
+                    } else {
+                        val aeCompensationRange = cameraCharacteristics.aeCompensationRange
+                        val aeCompensation = viewModel.aeCompensationFlow.collectAsState()
+                        if (aeCompensationRange != null) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(text = "曝光补偿：")
+                                Slider(
+                                    valueRange = aeCompensationRange.run { lower.toFloat()..upper.toFloat() },
+                                    value = aeCompensation.value.toFloat(),
+                                    onValueChange = {
+                                        viewModel.aeCompensationFlow.value = it.toInt()
+                                    },
                                 )
                             }
                         }
                     }
                 }
-            }
 
-            val captureMode = viewModel.captureModeFlow.collectAsState()
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(text = "拍照模式：")
-                for (mode in CaptureMode.entries) {
-                    Button(enabled = captureMode.value != mode, onClick = {
-                        viewModel.captureModeFlow.value = mode
-                    }) {
-                        Text(text = mode.name)
-                    }
-                }
-            }
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(text = "辅助：")
-                Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                    val focusPeakingEnable = viewModel.focusPeakingEnableFlow.collectAsState()
-                    EnableButton(
-                        enable = focusPeakingEnable.value,
-                        label = "峰值对焦",
-                        onClick = { viewModel.focusPeakingEnableFlow.apply { value = !value } }
-                    )
-                    val brightnessPeakingEnable =
-                        viewModel.brightnessPeakingEnableFlow.collectAsState()
-                    EnableButton(
-                        enable = brightnessPeakingEnable.value,
-                        label = "峰值亮度",
-                        onClick = { viewModel.brightnessPeakingEnableFlow.apply { value = !value } }
-                    )
-                    val exposureHistogramEnable =
-                        viewModel.exposureHistogramEnableFlow.collectAsState()
-                    EnableButton(
-                        enable = exposureHistogramEnable.value,
-                        label = "直方图",
-                        onClick = { viewModel.exposureHistogramEnableFlow.apply { value = !value } }
-                    )
-                }
-            }
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(text = "场景模式：")
-                Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                    val currentSceneMode = viewModel.currentSceneModeFlow.collectAsState()
-                    EnableButton(
-                        enable = currentSceneMode.value == null,
-                        label = "无",
-                        onClick = { viewModel.currentSceneModeFlow.value = null }
-                    )
-                    viewModel.sceneModeAvailableList.forEach { sceneMode ->
-                        EnableButton(
-                            enable = currentSceneMode.value == sceneMode,
-                            label = sceneMode.name,
-                            onClick = { viewModel.currentSceneModeFlow.value = sceneMode }
-                        )
-                    }
-                }
-            }
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(text = "光学防抖：")
-                Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                    val oisEnable = viewModel.oisEnableFlow.collectAsState()
-                    val oisAvailable = viewModel.oisAvailable
-                    if (oisAvailable.value) {
-                        EnableButton(
-                            enable = oisEnable.value,
-                            label = "OIS",
-                            onClick = { viewModel.oisEnableFlow.apply { value = !value } }
-                        )
-                    } else {
-                        Button(onClick = { }, enabled = false) {
-                            Text(text = "无")
-                        }
-                    }
-                }
-            }
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(text = "人脸识别：")
-                Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                    val currentFaceDetectMode = viewModel.currentFaceDetectModeFlow.collectAsState()
-                    viewModel.availableFaceDetectModes.forEach { faceDetectMode ->
-                        EnableButton(
-                            enable = currentFaceDetectMode.value == faceDetectMode,
-                            label = faceDetectMode.label,
-                            onClick = { viewModel.currentFaceDetectModeFlow.value = faceDetectMode }
-                        )
-                    }
-                }
-            }
-
-            val zoomRatioRange = viewModel.zoomRatioRange
-            if (zoomRatioRange.value != null) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(text = "电子变焦：")
-                    val zoomRatio = viewModel.zoomRatioFlow.collectAsState()
-                    Box(modifier = Modifier.width(80.dp)) {
-                        Text(text = "${zoomRatio.value}/${zoomRatioRange.value!!.upper}")
-                    }
-                    Slider(
-                        valueRange = zoomRatioRange.value!!.run { lower.toFloat()..upper.toFloat() },
-                        value = zoomRatio.value,
-                        onValueChange = {
-                            viewModel.zoomRatioFlow.value = it
-                        },
-                    )
-                }
-            }
-
-            Column(modifier = Modifier.animateContentSize()) {
-                if (captureMode.value == CaptureMode.MANUAL) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(text = "手动控制：")
-
-                        Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                            val afEnable = viewModel.afEnableFlow.collectAsState(initial = true)
-                            EnableButton(
-                                enable = afEnable.value,
-                                label = "AF",
-                                onClick = { viewModel.setAfEnable(!afEnable.value) })
-
-                            val aeEnable = viewModel.aeEnableFlow.collectAsState(initial = true)
-                            EnableButton(
-                                enable = aeEnable.value,
-                                label = "AE",
-                                onClick = { viewModel.setAeEnable(!aeEnable.value) })
-
-                            val awbEnable = viewModel.awbEnableFlow.collectAsState(initial = true)
-                            EnableButton(
-                                enable = awbEnable.value,
-                                label = "AWB",
-                                onClick = { viewModel.setAwbEnable(!awbEnable.value) }
+                Row(horizontalArrangement = Arrangement.Center) {
+                    val captureLoading = viewModel.captureLoading
+                    Button(onClick = onCapture, enabled = !captureLoading.value) {
+                        if (captureLoading.value) {
+                            CircularProgressIndicator(
+                                modifier = Modifier
+                                    .padding(end = 12.dp)
+                                    .size(16.dp),
+                                strokeWidth = 2.dp
                             )
                         }
+                        Text(text = "拍照")
                     }
-
-                    val focalDistanceRange = viewModel.focalDistanceRange
-                    val focalDistance = viewModel.focalDistanceFlow.collectAsState()
-                    if (focalDistanceRange.value != null) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(text = "对焦距离：")
-                            Box(modifier = Modifier.width(80.dp)) {
-                                Text(text = "${focalDistance.value}/${focalDistanceRange.value!!.upper}")
-                            }
-                            Slider(
-                                valueRange = focalDistanceRange.value!!.run { lower.toFloat()..upper.toFloat() },
-                                value = focalDistance.value
-                                    ?: focalDistanceRange.value!!.lower.toFloat(),
-                                onValueChange = {
-                                    viewModel.focalDistanceFlow.value = it
-                                },
-                            )
-                        }
-                    }
-
-                    val sensorSensitivityRange = viewModel.sensorSensitivityRange
-                    val sensorSensitivity = viewModel.sensorSensitivityFlow.collectAsState()
-                    if (sensorSensitivityRange.value != null) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(text = "感光度：")
-                            Box(modifier = Modifier.width(80.dp)) {
-                                Text(text = "${sensorSensitivity.value}/${sensorSensitivityRange.value!!.upper}")
-                            }
-                            Slider(
-                                valueRange = sensorSensitivityRange.value!!.run { lower.toFloat()..upper.toFloat() },
-                                value = sensorSensitivity.value?.toFloat()
-                                    ?: sensorSensitivityRange.value!!.lower.toFloat(),
-                                onValueChange = {
-                                    viewModel.sensorSensitivityFlow.value = it.toInt()
-                                },
-                            )
-                        }
-                    }
-
-                    val sensorExposureTime = viewModel.sensorExposureTimeFlow.collectAsState()
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(text = "曝光时间：")
-                        Row(
-                            modifier = Modifier
-                                .weight(1F)
-                                .horizontalScroll(rememberScrollState())
-                        ) {
-                            for (exposureTime in ExposureTime.entries) {
-                                Button(
-                                    enabled = exposureTime.time != sensorExposureTime.value,
-                                    onClick = {
-                                        viewModel.sensorExposureTimeFlow.value = exposureTime.time
-                                    }
-                                ) {
-                                    Text(text = exposureTime.label)
-                                }
-                            }
-                        }
-                    }
-
-                    val customTemperature = viewModel.customTemperatureFlow.collectAsState()
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(text = "白平衡：")
-                        Box(modifier = Modifier.width(80.dp)) {
-                            Text(text = "${customTemperature.value}")
-                        }
-                        Slider(
-                            valueRange = 0F..100F,
-                            value = customTemperature.value?.toFloat() ?: 0F,
-                            onValueChange = {
-                                viewModel.customTemperatureFlow.value = it.toInt()
-                            },
-                        )
-                    }
-                } else {
-                    val aeCompensationRange = viewModel.aeCompensationRange
-                    val aeCompensation = viewModel.aeCompensationFlow.collectAsState()
-                    if (aeCompensationRange.value != null) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(text = "曝光补偿：")
-                            Slider(
-                                valueRange = aeCompensationRange.value!!.run { lower.toFloat()..upper.toFloat() },
-                                value = aeCompensation.value.toFloat(),
-                                onValueChange = {
-                                    viewModel.aeCompensationFlow.value = it.toInt()
-                                },
-                            )
-                        }
-                    }
-                }
-            }
-
-            Row(horizontalArrangement = Arrangement.Center) {
-                val captureLoading = viewModel.captureLoading
-                Button(onClick = onCapture, enabled = !captureLoading.value) {
-                    if (captureLoading.value) {
-                        CircularProgressIndicator(
-                            modifier = Modifier
-                                .padding(end = 12.dp)
-                                .size(16.dp),
-                            strokeWidth = 2.dp
-                        )
-                    }
-                    Text(text = "拍照")
                 }
             }
         }
