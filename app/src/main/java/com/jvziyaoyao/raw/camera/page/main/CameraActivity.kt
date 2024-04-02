@@ -286,10 +286,9 @@ class CameraActivity : ComponentActivity(), CoroutineScope by MainScope() {
                 cameraCaptureSessionFlow,
                 cameraDeviceFlow,
                 surfaceFlow,
-                mViewModel.captureModeFlow,
-                mViewModel.manualSensorParamsFlow,
-            ) { t0, t1, t2, t3, t4 ->
-                arrayOf(t0, t1, t2, t3, t4)
+                mViewModel.captureController.manualSensorParamsFlow,
+            ) { t0, t1, t2, t3 ->
+                arrayOf(t0, t1, t2, t3)
             }.collectLatest { t ->
                 try {
                     val cameraCaptureSession = cameraCaptureSessionFlow.value
@@ -1141,17 +1140,17 @@ fun Camera2ActionLayer(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(text = "场景模式：")
                     Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                        val currentSceneMode = viewModel.currentSceneModeFlow.collectAsState()
+                        val currentSceneMode = viewModel.captureController.currentSceneModeFlow.collectAsState()
                         EnableButton(
                             enable = currentSceneMode.value == null,
                             label = "无",
-                            onClick = { viewModel.currentSceneModeFlow.value = null }
+                            onClick = { viewModel.captureController.currentSceneModeFlow.value = null }
                         )
                         cameraCharacteristics.sceneModes.forEach { sceneMode ->
                             EnableButton(
                                 enable = currentSceneMode.value == sceneMode,
                                 label = sceneMode.name,
-                                onClick = { viewModel.currentSceneModeFlow.value = sceneMode }
+                                onClick = { viewModel.captureController.currentSceneModeFlow.value = sceneMode }
                             )
                         }
                     }
@@ -1160,13 +1159,13 @@ fun Camera2ActionLayer(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(text = "光学防抖：")
                     Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                        val oisEnable = viewModel.oisEnableFlow.collectAsState()
+                        val oisEnable = viewModel.captureController.oisEnableFlow.collectAsState()
                         val oisAvailable = cameraCharacteristics.oisAvailable
                         if (oisAvailable) {
                             EnableButton(
                                 enable = oisEnable.value,
                                 label = "OIS",
-                                onClick = { viewModel.oisEnableFlow.apply { value = !value } }
+                                onClick = { viewModel.captureController.oisEnableFlow.apply { value = !value } }
                             )
                         } else {
                             Button(onClick = { }, enabled = false) {
@@ -1180,13 +1179,13 @@ fun Camera2ActionLayer(
                     Text(text = "人脸识别：")
                     Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
                         val currentFaceDetectMode =
-                            viewModel.currentFaceDetectModeFlow.collectAsState()
+                            viewModel.captureController.currentFaceDetectModeFlow.collectAsState()
                         cameraCharacteristics.faceDetectModes.forEach { faceDetectMode ->
                             EnableButton(
                                 enable = currentFaceDetectMode.value == faceDetectMode,
                                 label = faceDetectMode.label,
                                 onClick = {
-                                    viewModel.currentFaceDetectModeFlow.value = faceDetectMode
+                                    viewModel.captureController.currentFaceDetectModeFlow.value = faceDetectMode
                                 }
                             )
                         }
@@ -1197,7 +1196,7 @@ fun Camera2ActionLayer(
                 if (zoomRatioRange != null) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(text = "电子变焦：")
-                        val zoomRatio = viewModel.zoomRatioFlow.collectAsState()
+                        val zoomRatio = viewModel.captureController.zoomRatioFlow.collectAsState()
                         Box(modifier = Modifier.width(80.dp)) {
                             Text(text = "${zoomRatio.value}/${zoomRatioRange.upper}")
                         }
@@ -1205,7 +1204,7 @@ fun Camera2ActionLayer(
                             valueRange = zoomRatioRange.run { lower.toFloat()..upper.toFloat() },
                             value = zoomRatio.value,
                             onValueChange = {
-                                viewModel.zoomRatioFlow.value = it
+                                viewModel.captureController.zoomRatioFlow.value = it
                             },
                         )
                     }
@@ -1217,30 +1216,30 @@ fun Camera2ActionLayer(
                             Text(text = "手动控制：")
 
                             Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                                val afEnable = viewModel.afEnableFlow.collectAsState(initial = true)
+                                val afEnable = viewModel.captureController.afEnableFlow.collectAsState(initial = true)
                                 EnableButton(
                                     enable = afEnable.value,
                                     label = "AF",
-                                    onClick = { viewModel.setAfEnable() })
+                                    onClick = { viewModel.captureController.setAfEnable() })
 
-                                val aeEnable = viewModel.aeEnableFlow.collectAsState(initial = true)
+                                val aeEnable = viewModel.captureController.aeEnableFlow.collectAsState(initial = true)
                                 EnableButton(
                                     enable = aeEnable.value,
                                     label = "AE",
-                                    onClick = { viewModel.setAeEnable() })
+                                    onClick = { viewModel.captureController.setAeEnable() })
 
                                 val awbEnable =
-                                    viewModel.awbEnableFlow.collectAsState(initial = true)
+                                    viewModel.captureController.awbEnableFlow.collectAsState(initial = true)
                                 EnableButton(
                                     enable = awbEnable.value,
                                     label = "AWB",
-                                    onClick = { viewModel.setAwbEnable() }
+                                    onClick = { viewModel.captureController.setAwbEnable() }
                                 )
                             }
                         }
 
                         val focalDistanceRange = cameraCharacteristics.focalDistanceRange
-                        val focalDistance = viewModel.focalDistanceFlow.collectAsState()
+                        val focalDistance = viewModel.captureController.focalDistanceFlow.collectAsState()
                         if (focalDistanceRange != null) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(text = "对焦距离：")
@@ -1252,14 +1251,14 @@ fun Camera2ActionLayer(
                                     value = focalDistance.value
                                         ?: focalDistanceRange.lower.toFloat(),
                                     onValueChange = {
-                                        viewModel.focalDistanceFlow.value = it
+                                        viewModel.captureController.focalDistanceFlow.value = it
                                     },
                                 )
                             }
                         }
 
                         val sensorSensitivityRange = cameraCharacteristics.sensorSensitivityRange
-                        val sensorSensitivity = viewModel.sensorSensitivityFlow.collectAsState()
+                        val sensorSensitivity = viewModel.captureController.sensorSensitivityFlow.collectAsState()
                         if (sensorSensitivityRange != null) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(text = "感光度：")
@@ -1271,13 +1270,13 @@ fun Camera2ActionLayer(
                                     value = sensorSensitivity.value?.toFloat()
                                         ?: sensorSensitivityRange.lower.toFloat(),
                                     onValueChange = {
-                                        viewModel.sensorSensitivityFlow.value = it.toInt()
+                                        viewModel.captureController.sensorSensitivityFlow.value = it.toInt()
                                     },
                                 )
                             }
                         }
 
-                        val sensorExposureTime = viewModel.sensorExposureTimeFlow.collectAsState()
+                        val sensorExposureTime = viewModel.captureController.sensorExposureTimeFlow.collectAsState()
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(text = "曝光时间：")
                             Row(
@@ -1289,7 +1288,7 @@ fun Camera2ActionLayer(
                                     Button(
                                         enabled = exposureTime.time != sensorExposureTime.value,
                                         onClick = {
-                                            viewModel.sensorExposureTimeFlow.value =
+                                            viewModel.captureController.sensorExposureTimeFlow.value =
                                                 exposureTime.time
                                         }
                                     ) {
@@ -1299,7 +1298,7 @@ fun Camera2ActionLayer(
                             }
                         }
 
-                        val customTemperature = viewModel.customTemperatureFlow.collectAsState()
+                        val customTemperature = viewModel.captureController.customTemperatureFlow.collectAsState()
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(text = "白平衡：")
                             Box(modifier = Modifier.width(80.dp)) {
@@ -1309,13 +1308,13 @@ fun Camera2ActionLayer(
                                 valueRange = 0F..100F,
                                 value = customTemperature.value?.toFloat() ?: 0F,
                                 onValueChange = {
-                                    viewModel.customTemperatureFlow.value = it.toInt()
+                                    viewModel.captureController.customTemperatureFlow.value = it.toInt()
                                 },
                             )
                         }
                     } else {
                         val aeCompensationRange = cameraCharacteristics.aeCompensationRange
-                        val aeCompensation = viewModel.aeCompensationFlow.collectAsState()
+                        val aeCompensation = viewModel.captureController.aeCompensationFlow.collectAsState()
                         if (aeCompensationRange != null) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(text = "曝光补偿：")
@@ -1323,7 +1322,7 @@ fun Camera2ActionLayer(
                                     valueRange = aeCompensationRange.run { lower.toFloat()..upper.toFloat() },
                                     value = aeCompensation.value.toFloat(),
                                     onValueChange = {
-                                        viewModel.aeCompensationFlow.value = it.toInt()
+                                        viewModel.captureController.aeCompensationFlow.value = it.toInt()
                                     },
                                 )
                             }
