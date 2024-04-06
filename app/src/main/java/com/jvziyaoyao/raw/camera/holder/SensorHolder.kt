@@ -1,4 +1,4 @@
-package com.jvziyaoyao.raw.camera.domain.clean.usecase
+package com.jvziyaoyao.raw.camera.holder
 
 import android.hardware.Sensor
 import android.hardware.SensorEvent
@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlin.math.acos
 import kotlin.math.sqrt
 
-class SensorUseCase {
+class SensorHolder {
 
     private var sensorManager: SensorManager
     private var accelerometer: Sensor? = null

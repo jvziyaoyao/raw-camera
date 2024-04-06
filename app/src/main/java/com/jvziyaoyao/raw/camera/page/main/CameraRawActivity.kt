@@ -1,26 +1,9 @@
 package com.jvziyaoyao.raw.camera.page.main
 
-import android.Manifest
-import android.annotation.SuppressLint
-import android.content.Context
-import android.graphics.ImageFormat
-import android.hardware.camera2.CameraCaptureSession
-import android.hardware.camera2.CameraCaptureSession.CaptureCallback
-import android.hardware.camera2.CameraCharacteristics
-import android.hardware.camera2.CameraDevice
-import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CameraMetadata
-import android.hardware.camera2.CaptureRequest
-import android.hardware.camera2.CaptureResult
-import android.hardware.camera2.DngCreator
-import android.hardware.camera2.TotalCaptureResult
-import android.media.ImageReader
 import android.opengl.GLSurfaceView
 import android.os.Build
 import android.os.Bundle
-import android.os.Environment
-import android.os.Handler
-import android.os.HandlerThread
 import android.util.Log
 import android.view.Surface
 import android.view.ViewGroup
@@ -30,7 +13,6 @@ import androidx.activity.compose.setContent
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -58,6 +40,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -68,7 +51,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -79,74 +61,23 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.exifinterface.media.ExifInterface
 import com.jvziyaoyao.raw.camera.ui.base.CommonPermissions
 import com.jvziyaoyao.raw.camera.ui.base.animateRotationAsState
 import com.jvziyaoyao.raw.camera.ui.theme.Layout
-import com.jvziyaoyao.raw.camera.util.testTime
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.androidx.viewmodel.ext.android.viewModel
-import org.opencv.android.OpenCVLoader
-import org.opencv.core.Core
-import org.opencv.core.CvType
-import org.opencv.core.Mat
-import java.io.File
-import java.io.FileOutputStream
-import java.nio.ByteBuffer
 import kotlin.math.absoluteValue
 
+class CameraRawActivity : ComponentActivity(), CoroutineScope by MainScope() {
 
-/**
- * @program: TestFocusable
- *
- * @description:
- *
- * @author: JVZIYAOYAO
- *
- * @create: 2024-01-08 17:36
- **/
-class CameraActivity : ComponentActivity(), CoroutineScope by MainScope() {
-
-    private val TAG = CameraActivity::class.java.name
-
-    private val mViewModel by viewModel<CameraViewModel>()
-
-    private var cameraDeviceFlow = MutableStateFlow<CameraDevice?>(null)
-
-    private var cameraCaptureSessionFlow = MutableStateFlow<CameraCaptureSession?>(null)
-
-    private var glSurfaceViewFlow = MutableStateFlow<GLSurfaceView?>(null)
-
-    private var surfaceFlow = MutableStateFlow<Surface?>(null)
-
-    private val cameraSurfaceRender = CameraSurfaceRenderer(TEX_VERTEX_MAT_0)
-
-    private var imageOutputReader: ImageReader? = null
-
-    private var imagePreviewReader: ImageReader? = null
-
-    private var captureResult: CaptureResult? = null
-
-    private var captureTimestamp: Long? = null
-
-    private val handlerThread = HandlerThread("CameraHandlerThread").apply { start() }
-
-    private val handler = Handler(handlerThread.looper)
+    private val mViewModel by viewModel<CameraRawViewModel>()
 
     private val displayRotation: Int
         get() = when (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -160,27 +91,10 @@ class CameraActivity : ComponentActivity(), CoroutineScope by MainScope() {
             else -> 0
         }
 
-    private var frameCount = 0
-
-    private val yuvDataFlow = MutableStateFlow<YUVRenderData?>(null)
-
-    private val grayMatFlow = MutableStateFlow<Mat?>(null)
-
-    private val focusPeakingMatFlow = MutableStateFlow<Mat?>(null)
-
-    private val brightnessPeakingMatFlow = MutableStateFlow<Mat?>(null)
-
-    private val outputFileFlow = MutableSharedFlow<File?>(0)
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // 初始化OpenCV
-        OpenCVLoader.initLocal()
-        // 获取摄像头列表
-        // 必须先在activity中执行这一行，以确保UI中不会自己创建一个新的viewModel
-        mViewModel.displayRotation.value = displayRotation
-        mViewModel.cameraPairListFlow.value = fetchCameraPairList()
         mViewModel.setupSensor()
+        mViewModel.setupCamera(displayRotation)
 
         setContent {
             CommonPermissions(
@@ -189,235 +103,23 @@ class CameraActivity : ComponentActivity(), CoroutineScope by MainScope() {
                     mViewModel.allPermissionGrantedFlow.value = it
                 }
             ) {
-                Camera2Body(
+                CameraRawBody(
                     onGLSurfaceView = { glSurfaceView ->
-                        glSurfaceViewFlow.value = glSurfaceView
-                        glSurfaceView.setEGLContextClientVersion(3)
-                        glSurfaceView.setRenderer(cameraSurfaceRender)
+                        mViewModel.setSurfaceView(glSurfaceView)
                     },
                     onCapture = {
                         launch {
                             mViewModel.captureLoading.value = true
                             try {
-                                onCapture()
+                                mViewModel.onCapture()
                             } catch (e: Exception) {
                                 e.printStackTrace()
                             } finally {
                                 mViewModel.captureLoading.value = false
                             }
                         }
-                    },
+                    }
                 )
-            }
-        }
-
-        // 初始化选择摄像头
-        launch {
-            combine(mViewModel.cameraPairListFlow, mViewModel.currentCameraPairFlow) { t1, t2 ->
-                Pair(t1, t2)
-            }.collectLatest { t ->
-                val pairList = mViewModel.cameraPairListFlow.value
-                val currentCameraPair = mViewModel.currentCameraPairFlow.value
-                if (currentCameraPair == null) {
-                    mViewModel.currentCameraPairFlow.value = chooseDefaultCameraPair(pairList)
-                }
-            }
-        }
-
-        // 开启当前摄像头
-        launch {
-            combine(
-                mViewModel.currentCameraPairFlow,
-                mViewModel.resumeTimestampFlow,
-                mViewModel.allPermissionGrantedFlow
-            ) { t1, t2, t3 -> Triple(t1, t2, t3) }.collectLatest { t ->
-                val cameraPair = mViewModel.currentCameraPairFlow.value
-                val allPermissionGrantedFlow = mViewModel.allPermissionGrantedFlow.value
-                val resumeTimeStamp = mViewModel.resumeTimestampFlow.value
-                if (allPermissionGrantedFlow && resumeTimeStamp != null) {
-                    if (cameraDeviceFlow.value != null) {
-                        if (cameraDeviceFlow.value?.id != cameraPair?.first) {
-                            // 关闭摄像头
-                            closeCamera()
-                            // 开启摄像头
-                            cameraPair?.let { openCamera(it) }
-                        }
-                    } else {
-                        // 开启摄像头
-                        cameraPair?.let { openCamera(it) }
-                    }
-                } else {
-                    // 关闭摄像头
-                    closeCamera()
-                }
-            }
-        }
-
-        // 开启预览
-        launch {
-            combine(
-                cameraDeviceFlow,
-                mViewModel.currentOutputItemFlow,
-                mViewModel.currentCameraPairFlow,
-            ) { t0, t1, t2 ->
-                Triple(t0, t1, t2)
-            }.collectLatest { t ->
-                val cameraDevice = t.first
-                val currentOutputItem = t.second
-                val cameraPair = t.third
-                val cameraCharacteristics = cameraPair?.second
-                val cameraId = cameraPair?.first
-                if (
-                    cameraDevice != null
-                    && cameraCharacteristics != null
-                    && cameraId == cameraDevice.id
-                ) {
-                    startPreview(
-                        cameraDevice,
-                        cameraCharacteristics,
-                        currentOutputItem,
-                    )
-                }
-            }
-        }
-
-        // 变更预览参数
-        launch {
-            combine(
-                cameraCaptureSessionFlow,
-                cameraDeviceFlow,
-                surfaceFlow,
-                mViewModel.captureController.manualSensorParamsFlow,
-            ) { t0, t1, t2, t3 ->
-                arrayOf(t0, t1, t2, t3)
-            }.collectLatest { t ->
-                try {
-                    val cameraCaptureSession = cameraCaptureSessionFlow.value
-                    val cameraDevice = cameraDeviceFlow.value
-                    val previewSurface = surfaceFlow.value
-                    if (cameraCaptureSession != null && cameraDevice != null && previewSurface != null) {
-                        val captureRequest =
-                            cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply {
-                                addTarget(previewSurface)
-                                mViewModel.setCurrentCaptureParams(this)
-                            }.build()
-
-                        cameraCaptureSession.setRepeatingRequest(
-                            captureRequest,
-                            previewCaptureCallback,
-                            handler
-                        )
-                    }
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-            }
-        }
-
-        // 计算帧率
-        launch {
-            var job: Job? = null
-            mViewModel.resumeTimestampFlow.collectLatest {
-                launch {
-                    val resumeTimestamp = mViewModel.resumeTimestampFlow.value
-                    if (resumeTimestamp != null) {
-                        job?.cancel()
-                        job = launch(Dispatchers.IO) {
-                            var currentCount = frameCount
-                            var currentRenderCount = cameraSurfaceRender.frameCount
-                            while (mViewModel.resumeTimestampFlow.value != null) {
-                                delay(1000)
-                                Log.i(
-                                    TAG,
-                                    "onCreate: calc frame 计算帧率： $frameCount - ${cameraSurfaceRender.frameCount}"
-                                )
-                                mViewModel.captureFrameRate.value = frameCount - currentCount
-                                mViewModel.rendererFrameRate.value =
-                                    cameraSurfaceRender.frameCount - currentRenderCount
-                                currentCount = frameCount
-                                currentRenderCount = cameraSurfaceRender.frameCount
-                            }
-                        }
-                    } else {
-                        job = null
-                    }
-                }
-            }
-        }
-
-        // 填充预览yuv数据
-        launch(Dispatchers.IO) {
-            yuvDataFlow.collectLatest {
-                cameraSurfaceRender.currentYuvData = it
-            }
-        }
-
-        // 填充直方图数据
-        launch(Dispatchers.IO) {
-            combine(grayMatFlow, mViewModel.exposureHistogramEnableFlow) { t01, t02 ->
-                arrayOf(t01, t02)
-            }.collectLatest {
-                val grayMat = grayMatFlow.value
-                val histogram = mViewModel.exposureHistogramEnableFlow.value
-                mViewModel.exposureHistogramDataFlow.value =
-                    if (histogram && grayMat != null) getHistogramData(grayMat) else null
-            }
-        }
-
-        // 填充峰值亮度数据
-        launch(Dispatchers.IO) {
-            val zebraOffsetArr = arrayOf(0).toIntArray()
-            combine(grayMatFlow, mViewModel.brightnessPeakingEnableFlow) { t01, t02 ->
-                arrayOf(t01, t02)
-            }.collectLatest {
-                val grayMat = grayMatFlow.value
-                val enable = mViewModel.brightnessPeakingEnableFlow.value
-                brightnessPeakingMatFlow.value =
-                    if (grayMat != null && enable) markOverExposedRegions(
-                        zebraOffsetArr,
-                        grayMat
-                    ) else null
-            }
-        }
-
-        // 填充峰值对焦数据
-        launch(Dispatchers.IO) {
-            combine(grayMatFlow, mViewModel.focusPeakingEnableFlow) { t01, t02 ->
-                arrayOf(t01, t02)
-            }.collectLatest {
-                val time = testTime {
-                    val grayMat = grayMatFlow.value
-                    val enable = mViewModel.focusPeakingEnableFlow.value
-                    focusPeakingMatFlow.value =
-                        if (grayMat != null && enable) {
-                            markShapeImageRegions(grayMat)
-                                .apply { preMultiplyAlpha() }
-                        } else null
-                }
-//                Log.i(TAG, "onCreate: focusPeakingMat time -> $time")
-            }
-        }
-
-        // 附加图层合并填充
-        launch(Dispatchers.IO) {
-            combine(brightnessPeakingMatFlow, focusPeakingMatFlow) { t01, t02 ->
-                arrayOf(t01, t02)
-            }.collectLatest {
-                val brightnessPeakingMat = brightnessPeakingMatFlow.value
-                val focusPeakingMat = focusPeakingMatFlow.value
-                cameraSurfaceRender.currentAdditionalMat =
-                    if (brightnessPeakingMat != null && focusPeakingMat != null) {
-                        Mat(brightnessPeakingMat.size(), CvType.CV_8UC4).apply {
-                            Core.addWeighted(
-                                brightnessPeakingMat,
-                                1.0,
-                                focusPeakingMat,
-                                1.0,
-                                0.0,
-                                this
-                            )
-                        }
-                    } else brightnessPeakingMat ?: focusPeakingMat
             }
         }
 
@@ -433,8 +135,8 @@ class CameraActivity : ComponentActivity(), CoroutineScope by MainScope() {
                 val currentPitch = mViewModel.pitchFlow.value
                 val currentRoll = mViewModel.rollFlow.value
                 val currentYaw = mViewModel.yawFlow.value
-                val focusRequestOrientation = mViewModel.focusRequestOrientation.value
-                focusRequestOrientation?.apply {
+                val srcOrientation = mViewModel.focusRequestOrientation.value
+                srcOrientation?.apply {
                     val delta = 10F
                     val delay = 1000 * 2 // 两秒内不要取消
                     if (
@@ -448,339 +150,54 @@ class CameraActivity : ComponentActivity(), CoroutineScope by MainScope() {
                 }
             }
         }
+
     }
 
     override fun onResume() {
         super.onResume()
         mViewModel.startSensor()
-        mViewModel.resumeTimestampFlow.value = System.currentTimeMillis()
+        mViewModel.resumeCamera()
     }
 
     override fun onPause() {
         super.onPause()
         mViewModel.stopSensor()
-        mViewModel.resumeTimestampFlow.value = null
+        mViewModel.pauseCamera()
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        mViewModel.releaseCamera()
         cancel()
     }
 
-    private suspend fun onCapture() {
-        if (cameraCaptureSessionFlow.value == null) return
-        val outputItem = mViewModel.currentOutputItemFlow.value
-        val cameraDevice = cameraDeviceFlow.value ?: return
-        val cameraCaptureRequest =
-            cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE)
-                .apply {
-                    if (outputItem != null) {
-                        imageOutputReader?.apply { addTarget(surface) }
-                    }
-                    val rotationOrientation = mViewModel.rotationOrientation.value
-                    set(CaptureRequest.JPEG_ORIENTATION, rotationOrientation)
-                    mViewModel.setCurrentCaptureParams(this)
-                }.build()
-        captureTimestamp = System.currentTimeMillis()
-        listOf(
-            async {
-                captureResult =
-                    cameraCaptureSessionFlow.value?.captureAsync(cameraCaptureRequest, handler)
-            },
-            async {
-                outputFileFlow.takeWhile { it != null }.first()
-                outputFileFlow.emit(null)
-            }
-        ).awaitAll()
-    }
-
-    private val previewCaptureCallback = object : CaptureCallback() {
-        override fun onCaptureCompleted(
-            session: CameraCaptureSession,
-            request: CaptureRequest,
-            result: TotalCaptureResult
-        ) {
-            super.onCaptureCompleted(session, request, result)
-            mViewModel.captureResultFlow.value = result
-        }
-    }
-
-    private fun setOrientation(cameraCharacteristics: CameraCharacteristics) {
-        // 设置预览方向相关
-        val sensorSize = cameraCharacteristics.sensorSize
-        val cameraFacing = cameraCharacteristics.cameraFacing
-        val isFrontCamera = cameraCharacteristics.isFrontCamera
-        if (sensorSize != null && cameraFacing != null) {
-            val sensorOrientation = cameraCharacteristics.sensorOrientation ?: 90
-            val rotationOrientationResult = if (isFrontCamera) {
-                (sensorOrientation + displayRotation) % 360
-            } else {
-                (sensorOrientation - displayRotation + 360) % 360
-            }
-            mViewModel.rotationOrientation.value = rotationOrientationResult
-            var nextTextureVertex = when (rotationOrientationResult) {
-                0 -> TEX_VERTEX_MAT_0
-                90 -> TEX_VERTEX_MAT_90
-                180 -> TEX_VERTEX_MAT_180
-                270 -> TEX_VERTEX_MAT_270
-                else -> TEX_VERTEX_MAT_90
-            }
-            if (isFrontCamera) nextTextureVertex = vertexHorizontalFlip(nextTextureVertex)
-            cameraSurfaceRender.currentYuvData = null
-            cameraSurfaceRender.updateTextureBuffer(nextTextureVertex)
-        }
-    }
-
-    private suspend fun startPreview(
-        cameraDevice: CameraDevice,
-        cameraCharacteristics: CameraCharacteristics,
-        outputItem: OutputItem?,
-    ) {
-        val scaleStreamConfigurationMap = cameraCharacteristics.scaleStreamMap
-        val sensorAspectRatio = cameraCharacteristics.sensorAspectRatio
-        val surfaceList = mutableListOf<Surface>()
-
-        if (outputItem != null) {
-            imageOutputReader?.close()
-            imageOutputReader = ImageReader.newInstance(
-                outputItem.bestSize.width,
-                outputItem.bestSize.height,
-                outputItem.outputMode.imageFormat,
-                2
-            )
-            imageOutputReader!!.setOnImageAvailableListener(
-                outputImageAvailableListener,
-                handler
-            )
-            surfaceList.add(imageOutputReader!!.surface)
-        }
-
-        val outputSizeList = scaleStreamConfigurationMap?.getOutputSizes(ImageFormat.YUV_420_888)
-        val bestPreviewSize = outputSizeList?.run {
-            val aspectList = getSizeByAspectRatio(this, sensorAspectRatio)
-            return@run findBestSize(aspectList.toTypedArray(), 1280)
-        }
-        if (bestPreviewSize != null) {
-            Log.i(TAG, "startPreview: bestPreviewSize $bestPreviewSize")
-            imagePreviewReader?.close()
-            imagePreviewReader = ImageReader.newInstance(
-                bestPreviewSize.width,
-                bestPreviewSize.height,
-                ImageFormat.YUV_420_888,
-                2
-            )
-            imagePreviewReader!!.setOnImageAvailableListener(previewImageAvailableListener, handler)
-            surfaceFlow.value = imagePreviewReader!!.surface
-            surfaceList.add(imagePreviewReader!!.surface)
-        }
-
-        cameraCaptureSessionFlow.value = cameraDevice.createCameraSessionAsync(handler, surfaceList)
-    }
-
-    private fun getStoragePath(): File {
-        val picturesFile =
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES).absoluteFile
-        val storageFile = File(picturesFile, "yao")
-        if (!storageFile.exists()) storageFile.mkdirs()
-        return storageFile
-    }
-
-    private val outputImageAvailableListener = ImageReader.OnImageAvailableListener { reader ->
-        Log.i(TAG, "image: OnImageAvailableListener")
-        val image = reader.acquireNextImage()
-        var outputFile: File? = null
-        if (image.format == ImageFormat.JPEG || image.format == ImageFormat.DEPTH_JPEG) {
-            var fos: FileOutputStream? = null
-            try {
-                val byteBuffer = image.planes[0].buffer
-                val bytes = ByteArray(byteBuffer.remaining()).apply { byteBuffer.get(this) }
-                val file = File(
-                    getStoragePath(),
-                    "YAO_${captureTimestamp ?: System.currentTimeMillis()}.jpg"
-                )
-                fos = FileOutputStream(file)
-                fos.write(bytes)
-                fos.flush()
-                outputFile = file
-                Log.i(TAG, "image: jpeg -> successful")
-            } catch (e: Exception) {
-                e.printStackTrace()
-            } finally {
-                fos?.close()
-            }
-        } else if (image.format == ImageFormat.HEIC) {
-            var fos: FileOutputStream? = null
-            try {
-                val byteBuffer = image.planes[0].buffer
-                val bytes = ByteArray(byteBuffer.remaining()).apply { byteBuffer.get(this) }
-                val file = File(
-                    getStoragePath(),
-                    "YAO_${captureTimestamp ?: System.currentTimeMillis()}.heic"
-                )
-                fos = FileOutputStream(file)
-                fos.write(bytes)
-                fos.flush()
-                outputFile = file
-                Log.i(TAG, "image: heic -> successful")
-            } catch (e: Exception) {
-                e.printStackTrace()
-            } finally {
-                fos?.close()
-            }
-        } else if (image.format == ImageFormat.RAW_SENSOR && captureResult != null) {
-            val cameraPair = mViewModel.currentCameraPairFlow.value
-            val cameraCharacteristics = cameraPair?.second ?: return@OnImageAvailableListener
-            var fos: FileOutputStream? = null
-            var dngCreator: DngCreator? = null
-            try {
-                dngCreator =
-                    DngCreator(cameraCharacteristics, captureResult!!)
-                val file = File(
-                    getStoragePath(),
-                    "YAO_${captureTimestamp ?: System.currentTimeMillis()}.dng"
-                )
-                fos = FileOutputStream(file)
-                val exifRotation = when (mViewModel.rotationOrientation.value) {
-                    90 -> ExifInterface.ORIENTATION_ROTATE_90
-                    180 -> ExifInterface.ORIENTATION_ROTATE_180
-                    270 -> ExifInterface.ORIENTATION_ROTATE_270
-                    else -> ExifInterface.ORIENTATION_NORMAL
-                }
-
-                // dng图片无法同时旋转和水平翻转
-                dngCreator.setOrientation(exifRotation)
-                dngCreator.writeImage(fos, image)
-                captureResult = null
-                outputFile = file
-            } catch (e: Exception) {
-                e.printStackTrace()
-            } finally {
-                dngCreator?.close()
-                fos?.close()
-            }
-            Log.i(TAG, "image: dng -> successful")
-        }
-        launch {
-            outputFileFlow.emit(outputFile)
-        }
-        image.close()
-    }
-
-    private val previewImageAvailableListener = object : ImageReader.OnImageAvailableListener {
-        override fun onImageAvailable(reader: ImageReader?) {
-            val image = reader?.acquireNextImage() ?: return
-            frameCount++
-            val time = testTime {
-                val width = image.width
-                val height = image.height
-                val plans = image.planes
-                val y = plans[0].buffer
-                val u = plans[1].buffer
-                val v = plans[2].buffer
-                y.position(0)
-                u.position(0)
-                v.position(0)
-
-                val yByteBuffer = ByteBuffer.allocateDirect(y.capacity())
-                val uByteBuffer = ByteBuffer.allocateDirect(u.capacity())
-                val vByteBuffer = ByteBuffer.allocateDirect(v.capacity())
-                yByteBuffer.put(y)
-                uByteBuffer.put(u)
-                vByteBuffer.put(v)
-                yByteBuffer.position(0)
-                uByteBuffer.position(0)
-                vByteBuffer.position(0)
-
-                grayMatFlow.value = Mat(height, width, CvType.CV_8UC1, yByteBuffer)
-                yByteBuffer.position(0)
-                yuvDataFlow.value = YUVRenderData(
-                    width = width,
-                    height = height,
-                    yByteArray = yByteBuffer,
-                    uByteArray = uByteBuffer,
-                    vByteArray = vByteBuffer,
-                )
-
-            }
-//            Log.i(TAG, "previewImageAvailableListener process frame time $time")
-            image.close()
-        }
-    }
-
-    @SuppressLint("MissingPermission")
-    private fun openCamera(cameraPair: CameraPair) {
-        val cameraCharacteristics = cameraPair.second
-        // 获取当前摄像头支持的输出格式
-        mViewModel.fetchCurrentSupportedOutput(cameraCharacteristics)
-        // 设置预览渲染的旋转角度
-        setOrientation(cameraCharacteristics)
-        // 实际开启摄像头代码
-        val cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
-        val cameraId = cameraPair.first
-        cameraManager.openCamera(cameraId, object : CameraDevice.StateCallback() {
-            override fun onOpened(camera: CameraDevice) {
-                cameraDeviceFlow.value = camera
-            }
-
-            override fun onDisconnected(camera: CameraDevice) {
-            }
-
-            override fun onError(camera: CameraDevice, error: Int) {
-            }
-
-        }, handler)
-    }
-
-    private fun closeCamera() {
-        imageOutputReader?.close()
-        imageOutputReader = null
-        cameraCaptureSessionFlow.value?.close()
-        cameraCaptureSessionFlow.value = null
-        cameraDeviceFlow.value?.close()
-        cameraDeviceFlow.value = null
-    }
-
 }
 
-val camera2Permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-    listOf(
-        Manifest.permission.CAMERA,
-        Manifest.permission.READ_MEDIA_IMAGES,
-        Manifest.permission.READ_MEDIA_AUDIO,
-        Manifest.permission.READ_MEDIA_VIDEO,
-    )
-} else {
-    listOf(
-        Manifest.permission.CAMERA,
-        Manifest.permission.WRITE_EXTERNAL_STORAGE,
-        Manifest.permission.READ_EXTERNAL_STORAGE
-    )
-}
 
 @Composable
-fun Camera2Body(
+fun CameraRawBody(
     onGLSurfaceView: (GLSurfaceView) -> Unit,
     onCapture: () -> Unit,
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
         // 预览图层
-        Camera2PreviewLayer(
+        CameraRawPreviewLayer(
             onGLSurfaceView = onGLSurfaceView,
         )
         // 信息图层
-        Camera2InfoLayer()
+        CameraRawInfoLayer()
         // 操作图层
-        Camera2ActionLayer(
+        CameraRawActionLayer(
             onCapture = onCapture,
         )
     }
 }
 
 @Composable
-fun Camera2PreviewLayer(
+fun CameraRawPreviewLayer(
     onGLSurfaceView: (GLSurfaceView) -> Unit,
 ) {
-    val viewModel: CameraViewModel = koinViewModel()
+    val viewModel: CameraRawViewModel = koinViewModel()
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val portrait = maxHeight > maxWidth
         val currentCameraPair = viewModel.currentCameraPairFlow.collectAsState()
@@ -945,14 +362,14 @@ fun Camera2PreviewLayer(
                 }
             }
 
-            CameraSeaLevel()
+            CameraRawSeaLevel()
         }
     }
 }
 
 @Composable
-fun Camera2InfoLayer() {
-    val viewModel: CameraViewModel = koinViewModel()
+fun CameraRawInfoLayer() {
+    val viewModel: CameraRawViewModel = koinViewModel()
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
@@ -980,15 +397,6 @@ fun Camera2InfoLayer() {
             modifier = Modifier
                 .align(Alignment.TopEnd)
         ) {
-            val surfaceBitmap = viewModel.surfaceBitmap
-            if (surfaceBitmap.value != null) {
-                Image(
-                    modifier = Modifier
-                        .size(200.dp),
-                    bitmap = surfaceBitmap.value!!.asImageBitmap(),
-                    contentDescription = null
-                )
-            }
             val exposureHistogramData = viewModel.exposureHistogramDataFlow.collectAsState()
             if (exposureHistogramData.value != null) {
                 Canvas(
@@ -1024,10 +432,10 @@ fun Camera2InfoLayer() {
 }
 
 @Composable
-fun Camera2ActionLayer(
+fun CameraRawActionLayer(
     onCapture: () -> Unit,
 ) {
-    val viewModel: CameraViewModel = koinViewModel()
+    val viewModel: CameraRawViewModel = koinViewModel()
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
@@ -1141,17 +549,23 @@ fun Camera2ActionLayer(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(text = "场景模式：")
                     Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                        val currentSceneMode = viewModel.captureController.currentSceneModeFlow.collectAsState()
+                        val currentSceneMode =
+                            viewModel.captureController.currentSceneModeFlow.collectAsState()
                         EnableButton(
                             enable = currentSceneMode.value == null,
                             label = "无",
-                            onClick = { viewModel.captureController.currentSceneModeFlow.value = null }
+                            onClick = {
+                                viewModel.captureController.currentSceneModeFlow.value = null
+                            }
                         )
                         cameraCharacteristics.sceneModes.forEach { sceneMode ->
                             EnableButton(
                                 enable = currentSceneMode.value == sceneMode,
                                 label = sceneMode.name,
-                                onClick = { viewModel.captureController.currentSceneModeFlow.value = sceneMode }
+                                onClick = {
+                                    viewModel.captureController.currentSceneModeFlow.value =
+                                        sceneMode
+                                }
                             )
                         }
                     }
@@ -1166,7 +580,11 @@ fun Camera2ActionLayer(
                             EnableButton(
                                 enable = oisEnable.value,
                                 label = "OIS",
-                                onClick = { viewModel.captureController.oisEnableFlow.apply { value = !value } }
+                                onClick = {
+                                    viewModel.captureController.oisEnableFlow.apply {
+                                        value = !value
+                                    }
+                                }
                             )
                         } else {
                             Button(onClick = { }, enabled = false) {
@@ -1186,7 +604,8 @@ fun Camera2ActionLayer(
                                 enable = currentFaceDetectMode.value == faceDetectMode,
                                 label = faceDetectMode.label,
                                 onClick = {
-                                    viewModel.captureController.currentFaceDetectModeFlow.value = faceDetectMode
+                                    viewModel.captureController.currentFaceDetectModeFlow.value =
+                                        faceDetectMode
                                 }
                             )
                         }
@@ -1217,13 +636,15 @@ fun Camera2ActionLayer(
                             Text(text = "手动控制：")
 
                             Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                                val afEnable = viewModel.captureController.afEnableFlow.collectAsState(initial = true)
+                                val afEnable =
+                                    viewModel.captureController.afEnableFlow.collectAsState(initial = true)
                                 EnableButton(
                                     enable = afEnable.value,
                                     label = "AF",
                                     onClick = { viewModel.captureController.setAfEnable() })
 
-                                val aeEnable = viewModel.captureController.aeEnableFlow.collectAsState(initial = true)
+                                val aeEnable =
+                                    viewModel.captureController.aeEnableFlow.collectAsState(initial = true)
                                 EnableButton(
                                     enable = aeEnable.value,
                                     label = "AE",
@@ -1240,7 +661,8 @@ fun Camera2ActionLayer(
                         }
 
                         val focalDistanceRange = cameraCharacteristics.focalDistanceRange
-                        val focalDistance = viewModel.captureController.focalDistanceFlow.collectAsState()
+                        val focalDistance =
+                            viewModel.captureController.focalDistanceFlow.collectAsState()
                         if (focalDistanceRange != null) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(text = "对焦距离：")
@@ -1259,7 +681,8 @@ fun Camera2ActionLayer(
                         }
 
                         val sensorSensitivityRange = cameraCharacteristics.sensorSensitivityRange
-                        val sensorSensitivity = viewModel.captureController.sensorSensitivityFlow.collectAsState()
+                        val sensorSensitivity =
+                            viewModel.captureController.sensorSensitivityFlow.collectAsState()
                         if (sensorSensitivityRange != null) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(text = "感光度：")
@@ -1271,13 +694,15 @@ fun Camera2ActionLayer(
                                     value = sensorSensitivity.value?.toFloat()
                                         ?: sensorSensitivityRange.lower.toFloat(),
                                     onValueChange = {
-                                        viewModel.captureController.sensorSensitivityFlow.value = it.toInt()
+                                        viewModel.captureController.sensorSensitivityFlow.value =
+                                            it.toInt()
                                     },
                                 )
                             }
                         }
 
-                        val sensorExposureTime = viewModel.captureController.sensorExposureTimeFlow.collectAsState()
+                        val sensorExposureTime =
+                            viewModel.captureController.sensorExposureTimeFlow.collectAsState()
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(text = "曝光时间：")
                             Row(
@@ -1299,7 +724,8 @@ fun Camera2ActionLayer(
                             }
                         }
 
-                        val customTemperature = viewModel.captureController.customTemperatureFlow.collectAsState()
+                        val customTemperature =
+                            viewModel.captureController.customTemperatureFlow.collectAsState()
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(text = "白平衡：")
                             Box(modifier = Modifier.width(80.dp)) {
@@ -1309,13 +735,15 @@ fun Camera2ActionLayer(
                                 valueRange = 0F..100F,
                                 value = customTemperature.value?.toFloat() ?: 0F,
                                 onValueChange = {
-                                    viewModel.captureController.customTemperatureFlow.value = it.toInt()
+                                    viewModel.captureController.customTemperatureFlow.value =
+                                        it.toInt()
                                 },
                             )
                         }
                     } else {
                         val aeCompensationRange = cameraCharacteristics.aeCompensationRange
-                        val aeCompensation = viewModel.captureController.aeCompensationFlow.collectAsState()
+                        val aeCompensation =
+                            viewModel.captureController.aeCompensationFlow.collectAsState()
                         if (aeCompensationRange != null) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(text = "曝光补偿：")
@@ -1323,7 +751,8 @@ fun Camera2ActionLayer(
                                     valueRange = aeCompensationRange.run { lower.toFloat()..upper.toFloat() },
                                     value = aeCompensation.value.toFloat(),
                                     onValueChange = {
-                                        viewModel.captureController.aeCompensationFlow.value = it.toInt()
+                                        viewModel.captureController.aeCompensationFlow.value =
+                                            it.toInt()
                                     },
                                 )
                             }
@@ -1351,9 +780,9 @@ fun Camera2ActionLayer(
 }
 
 @Composable
-fun CameraSeaLevel() {
+fun CameraRawSeaLevel() {
     val density = LocalDensity.current
-    val viewModel: CameraViewModel = koinViewModel()
+    val viewModel: CameraRawViewModel = koinViewModel()
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
@@ -1369,13 +798,14 @@ fun CameraSeaLevel() {
                 .align(Alignment.Center),
         )
 
+        val displayRotation = viewModel.displayRotation
         val gravity = viewModel.gravityFlow.collectAsState()
         val gravityDegreesAnimation =
-            animateRotationAsState(targetValue = gravity.value - viewModel.displayRotation.value)
+            animateRotationAsState(targetValue = gravity.value - displayRotation.value)
         val pitch = viewModel.pitchFlow.collectAsState()
         val roll = viewModel.rollFlow.collectAsState()
         val pitchAnimation = animateFloatAsState(targetValue = pitch.value)
-        val rollAnimation = animateFloatAsState(targetValue = roll.value)
+        val rollAnimation =  animateFloatAsState(targetValue = roll.value)
         val offsetPY = remember {
             derivedStateOf {
                 var p = pitchAnimation.value.div(90F)
@@ -1415,18 +845,21 @@ fun CameraSeaLevel() {
 
         BoxWithConstraints(
             modifier = Modifier
+                .graphicsLayer {
+                    rotationZ = -displayRotation.value.toFloat()
+                }
                 .fillMaxWidth()
                 .aspectRatio(1F)
                 .align(Alignment.Center)
         ) {
-            val offsetY = remember(offsetPY.value) {
-                derivedStateOf {
-                    density.run { maxHeight.toPx().div(2).times(offsetPY.value) }
-                }
-            }
             val offsetX = remember(offsetPX.value) {
                 derivedStateOf {
                     density.run { maxWidth.toPx().div(2).times(offsetPX.value) }
+                }
+            }
+            val offsetY = remember(offsetPY.value) {
+                derivedStateOf {
+                    density.run { maxHeight.toPx().div(2).times(offsetPY.value) }
                 }
             }
             Box(
@@ -1442,25 +875,5 @@ fun CameraSeaLevel() {
                     .align(Alignment.Center)
             )
         }
-    }
-}
-
-@Composable
-fun EnableButton(
-    enable: Boolean,
-    label: String,
-    onClick: () -> Unit,
-) {
-    Button(
-        onClick = onClick,
-        colors = ButtonDefaults.buttonColors(
-            containerColor = if (enable) {
-                MaterialTheme.colorScheme.error
-            } else {
-                MaterialTheme.colorScheme.primary
-            }
-        ),
-    ) {
-        Text(text = "$label(${if (enable) "ON" else "OFF"})")
     }
 }

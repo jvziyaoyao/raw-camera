@@ -41,6 +41,7 @@ class SensorActivity : ComponentActivity(), CoroutineScope by MainScope() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        mViewModel.setupSensor()
 
         setContent {
             SensorBody()

@@ -69,6 +69,17 @@
             android:exported="true"
             android:screenOrientation="fullSensor"
             android:theme="@style/Theme.RawCamera">
+<!--            <intent-filter>-->
+<!--                <action android:name="android.intent.action.MAIN" />-->
+
+<!--                <category android:name="android.intent.category.LAUNCHER" />-->
+<!--            </intent-filter>-->
+        </activity>
+        <activity
+            android:name=".page.main.CameraRawActivity"
+            android:exported="true"
+            android:screenOrientation="fullSensor"
+            android:theme="@style/Theme.RawCamera">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
