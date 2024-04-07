@@ -12,9 +12,11 @@ import android.hardware.camera2.CameraMetadata
 import android.hardware.camera2.CaptureFailure
 import android.hardware.camera2.CaptureRequest
 import android.hardware.camera2.CaptureResult
+import android.hardware.camera2.DngCreator
 import android.hardware.camera2.TotalCaptureResult
 import android.hardware.camera2.params.OutputConfiguration
 import android.hardware.camera2.params.SessionConfiguration
+import android.media.Image
 import android.os.Build
 import android.os.Handler
 import android.util.Range
@@ -23,6 +25,8 @@ import android.view.PixelCopy
 import android.view.Surface
 import android.view.SurfaceView
 import androidx.compose.ui.geometry.Rect
+import java.io.File
+import java.io.FileOutputStream
 import java.util.concurrent.Executors
 import java.util.stream.Collectors
 import kotlin.coroutines.resume
@@ -71,6 +75,44 @@ fun SurfaceView.getLockCanvas(): Bitmap {
     canvas.setBitmap(bitmap)
     holder.unlockCanvasAndPost(canvas)
     return bitmap
+}
+
+fun writeImageAsJpeg(image: Image, outputFile: File) {
+    var fos: FileOutputStream? = null
+    try {
+        val byteBuffer = image.planes[0].buffer
+        val bytes = ByteArray(byteBuffer.remaining()).apply { byteBuffer.get(this) }
+        fos = FileOutputStream(outputFile)
+        fos.write(bytes)
+        fos.flush()
+    } catch (e: Exception) {
+        e.printStackTrace()
+    } finally {
+        fos?.close()
+    }
+}
+
+fun writeImageAsDng(
+    image: Image,
+    cameraCharacteristics: CameraCharacteristics,
+    captureResult: CaptureResult,
+    exifOrientation: Int,
+    outputFile: File,
+) {
+    var fos: FileOutputStream? = null
+    var dngCreator: DngCreator? = null
+    try {
+        dngCreator = DngCreator(cameraCharacteristics, captureResult)
+        fos = FileOutputStream(outputFile)
+        // dng图片无法同时旋转和水平翻转
+        dngCreator.setOrientation(exifOrientation)
+        dngCreator.writeImage(fos, image)
+    } catch (e: Exception) {
+        e.printStackTrace()
+    } finally {
+        dngCreator?.close()
+        fos?.close()
+    }
 }
 
 // 同步拍摄

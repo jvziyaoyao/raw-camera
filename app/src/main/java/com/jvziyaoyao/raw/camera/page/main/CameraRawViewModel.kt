@@ -1,12 +1,14 @@
 package com.jvziyaoyao.raw.camera.page.main
 
 import android.opengl.GLSurfaceView
+import android.os.Environment
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.geometry.Rect
 import androidx.lifecycle.ViewModel
 import com.jvziyaoyao.raw.camera.holder.CameraHolder
 import com.jvziyaoyao.raw.camera.holder.SensorHolder
 import kotlinx.coroutines.flow.MutableStateFlow
+import java.io.File
 
 class CameraRawViewModel : ViewModel() {
 
@@ -94,9 +96,19 @@ class CameraRawViewModel : ViewModel() {
     val rotationOrientation
         get() = cameraHolder.rotationOrientation
 
-    fun setupCamera(displayRotation: Int) {
-        cameraHolder = CameraHolder()
-        cameraHolder.setupCamera(displayRotation)
+    private fun getStoragePath(): File {
+        val picturesFile =
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES).absoluteFile
+        val storageFile = File(picturesFile, "yao")
+        if (!storageFile.exists()) storageFile.mkdirs()
+        return storageFile
+    }
+
+    fun setupCamera(
+        displayRotation: Int,
+    ) {
+        cameraHolder = CameraHolder(displayRotation = displayRotation)
+        cameraHolder.setupCamera()
     }
 
     fun releaseCamera() {
@@ -105,7 +117,16 @@ class CameraRawViewModel : ViewModel() {
 
     fun setSurfaceView(glSurfaceView: GLSurfaceView) = cameraHolder.setSurfaceView(glSurfaceView)
 
-    suspend fun onCapture() = cameraHolder.onCapture()
+    suspend fun onCapture() {
+        val outputItem = cameraHolder.currentOutputItemFlow.value ?: return
+        val extName = outputItem.outputMode.extName
+        val time = System.currentTimeMillis()
+        val outputFile = File(getStoragePath(), "YAO_$time.$extName")
+        cameraHolder.onCapture(
+            outputFile,
+            additionalRotation = saveImageOrientation.value,
+        )
+    }
 
     fun focusCancel() {
         cameraHolder.focusCancel()
@@ -139,5 +160,7 @@ class CameraRawViewModel : ViewModel() {
     val focusRequestOrientation = mutableStateOf<FocusRequestOrientation?>(null)
 
     val focusPointRectFlow = MutableStateFlow<Rect?>(null)
+
+    val saveImageOrientation = mutableStateOf(0)
 
 }

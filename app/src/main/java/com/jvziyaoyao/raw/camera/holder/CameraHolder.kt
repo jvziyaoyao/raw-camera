@@ -9,8 +9,8 @@ import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CaptureRequest
 import android.hardware.camera2.CaptureResult
-import android.hardware.camera2.DngCreator
 import android.hardware.camera2.TotalCaptureResult
+import android.media.Image
 import android.media.ImageReader
 import android.opengl.GLSurfaceView
 import android.os.Environment
@@ -51,6 +51,8 @@ import com.jvziyaoyao.raw.camera.page.main.sensorAspectRatio
 import com.jvziyaoyao.raw.camera.page.main.sensorOrientation
 import com.jvziyaoyao.raw.camera.page.main.sensorSize
 import com.jvziyaoyao.raw.camera.page.main.vertexHorizontalFlip
+import com.jvziyaoyao.raw.camera.page.main.writeImageAsDng
+import com.jvziyaoyao.raw.camera.page.main.writeImageAsJpeg
 import com.jvziyaoyao.raw.camera.util.ContextUtil
 import com.jvziyaoyao.raw.camera.util.testTime
 import kotlinx.coroutines.CoroutineScope
@@ -60,23 +62,50 @@ import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.launch
 import org.opencv.android.OpenCVLoader
 import org.opencv.core.Core
 import org.opencv.core.CvType
 import org.opencv.core.Mat
 import java.io.File
-import java.io.FileOutputStream
 import java.nio.ByteBuffer
+import kotlin.coroutines.resume
+import kotlin.coroutines.suspendCoroutine
 
-class CameraHolder : CoroutineScope by MainScope() {
+fun defaultStoragePath(): File {
+    val picturesFile =
+        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES).absoluteFile
+    val storageFile = File(picturesFile, "Camera")
+    if (!storageFile.exists()) storageFile.mkdirs()
+    return storageFile
+}
+
+typealias ProvideSaveFile = (Long, Int) -> File?
+
+val defaultProvideSaveFile: ProvideSaveFile = { time, format ->
+    val ext = when (format) {
+        ImageFormat.JPEG, ImageFormat.DEPTH_JPEG -> "JPEG"
+        ImageFormat.HEIC -> "HEIC"
+        ImageFormat.RAW_SENSOR -> "DNG"
+        else -> null
+    }
+    if (ext == null) null else {
+        File(
+            defaultStoragePath(),
+            "IMG_$time.$ext"
+        )
+    }
+}
+
+class CameraHolder(
+    val displayRotation: Int = 0,
+    val provideSaveFile: ProvideSaveFile = defaultProvideSaveFile,
+) : CoroutineScope by MainScope() {
 
     private val TAG = CameraHolder::class.java.name
 
@@ -98,10 +127,6 @@ class CameraHolder : CoroutineScope by MainScope() {
 
     private var imagePreviewReader: ImageReader? = null
 
-    private var captureResult: CaptureResult? = null
-
-    private var captureTimestamp: Long? = null
-
     private val handlerThread = HandlerThread("CameraHandlerThread").apply { start() }
 
     private val handler = Handler(handlerThread.looper)
@@ -116,38 +141,91 @@ class CameraHolder : CoroutineScope by MainScope() {
 
     private val brightnessPeakingMatFlow = MutableStateFlow<Mat?>(null)
 
-    private val outputFileFlow = MutableSharedFlow<File?>(0)
-
     init {
         // 初始化OpenCV
         OpenCVLoader.initLocal()
     }
 
-    suspend fun onCapture() {
+    suspend fun onCapture(
+        outputFile: File? = null,
+        additionalRotation: Int? = null,
+    ) {
         if (cameraCaptureSessionFlow.value == null) return
-        val outputItem = currentOutputItemFlow.value
         val cameraDevice = cameraDeviceFlow.value ?: return
+
+        var imageOrientation = rotationOrientation.value
+        if (additionalRotation != null) {
+            val srcImageOrientation =
+                if (imageOrientation < additionalRotation) imageOrientation + 360 else imageOrientation
+            imageOrientation = (srcImageOrientation - additionalRotation) % 360
+        }
+
         val cameraCaptureRequest =
             cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE)
                 .apply {
-                    if (outputItem != null) {
-                        imageOutputReader?.apply { addTarget(surface) }
-                    }
-                    val rotationOrientation = rotationOrientation.value
-                    set(CaptureRequest.JPEG_ORIENTATION, rotationOrientation)
+                    imageOutputReader?.apply { addTarget(surface) }
+                    set(CaptureRequest.JPEG_ORIENTATION, imageOrientation)
                     setCurrentCaptureParams(this)
                 }.build()
-        captureTimestamp = System.currentTimeMillis()
-        listOf(
-            async {
-                captureResult =
-                    cameraCaptureSessionFlow.value?.captureAsync(cameraCaptureRequest, handler)
-            },
-            async {
-                outputFileFlow.takeWhile { it != null }.first()
-                outputFileFlow.emit(null)
+        val captureTimestamp = System.currentTimeMillis()
+        val awaitResult = coroutineScope {
+            listOf(
+                async {
+                    return@async awaitOutputImage()
+                },
+                async {
+                    return@async cameraCaptureSessionFlow.value?.captureAsync(
+                        cameraCaptureRequest,
+                        handler
+                    )
+                },
+            ).awaitAll()
+        }
+        (awaitResult[0] as Image?)?.let { image ->
+            val destFile = outputFile
+                ?: provideSaveFile(
+                    captureTimestamp,
+                    image.format
+                )
+            destFile?.let { file ->
+                when (image.format) {
+                    ImageFormat.JPEG,
+                    ImageFormat.DEPTH_JPEG,
+                    ImageFormat.HEIC -> writeImageAsJpeg(image, file)
+
+                    ImageFormat.RAW_SENSOR -> {
+                        val cameraPair = currentCameraPairFlow.value
+                        val cameraCharacteristics = cameraPair?.second
+                        val captureResult = awaitResult[1] as CaptureResult?
+                        val exifOrientation = when (imageOrientation) {
+                            90 -> ExifInterface.ORIENTATION_ROTATE_90
+                            180 -> ExifInterface.ORIENTATION_ROTATE_180
+                            270 -> ExifInterface.ORIENTATION_ROTATE_270
+                            else -> ExifInterface.ORIENTATION_NORMAL
+                        }
+                        if (captureResult != null && cameraCharacteristics != null) {
+                            writeImageAsDng(
+                                image,
+                                cameraCharacteristics,
+                                captureResult,
+                                exifOrientation,
+                                file
+                            )
+                        }
+                    }
+
+                    else -> {}
+                }
             }
-        ).awaitAll()
+            image.close()
+        }
+    }
+
+    private suspend fun awaitOutputImage() = suspendCoroutine { c ->
+        imageOutputReader?.setOnImageAvailableListener({
+            val image = it?.acquireNextImage()
+            c.resume(image)
+        }, handler)
     }
 
     fun setSurfaceView(glSurfaceView: GLSurfaceView) {
@@ -174,11 +252,11 @@ class CameraHolder : CoroutineScope by MainScope() {
         val isFrontCamera = cameraCharacteristics.isFrontCamera
         if (sensorSize != null && cameraFacing != null) {
             val sensorOrientation = cameraCharacteristics.sensorOrientation ?: 90
-            Log.i(TAG, "setOrientation: displayRotation.value ${displayRotation.value}")
+            Log.i(TAG, "setOrientation: displayRotation.value $displayRotation")
             val rotationOrientationResult = if (isFrontCamera) {
-                (sensorOrientation + displayRotation.value) % 360
+                (sensorOrientation + displayRotation) % 360
             } else {
-                (sensorOrientation - displayRotation.value + 360) % 360
+                (sensorOrientation - displayRotation + 360) % 360
             }
             rotationOrientation.value = rotationOrientationResult
             var nextTextureVertex = when (rotationOrientationResult) {
@@ -211,10 +289,6 @@ class CameraHolder : CoroutineScope by MainScope() {
                 outputItem.outputMode.imageFormat,
                 2
             )
-            imageOutputReader!!.setOnImageAvailableListener(
-                outputImageAvailableListener,
-                handler
-            )
             surfaceList.add(imageOutputReader!!.surface)
         }
 
@@ -238,95 +312,6 @@ class CameraHolder : CoroutineScope by MainScope() {
         }
 
         cameraCaptureSessionFlow.value = cameraDevice.createCameraSessionAsync(handler, surfaceList)
-    }
-
-    private fun getStoragePath(): File {
-        val picturesFile =
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES).absoluteFile
-        val storageFile = File(picturesFile, "yao")
-        if (!storageFile.exists()) storageFile.mkdirs()
-        return storageFile
-    }
-
-    private val outputImageAvailableListener = ImageReader.OnImageAvailableListener { reader ->
-        Log.i(TAG, "image: OnImageAvailableListener")
-        val image = reader.acquireNextImage()
-        var outputFile: File? = null
-        if (image.format == ImageFormat.JPEG || image.format == ImageFormat.DEPTH_JPEG) {
-            var fos: FileOutputStream? = null
-            try {
-                val byteBuffer = image.planes[0].buffer
-                val bytes = ByteArray(byteBuffer.remaining()).apply { byteBuffer.get(this) }
-                val file = File(
-                    getStoragePath(),
-                    "YAO_${captureTimestamp ?: System.currentTimeMillis()}.jpg"
-                )
-                fos = FileOutputStream(file)
-                fos.write(bytes)
-                fos.flush()
-                outputFile = file
-                Log.i(TAG, "image: jpeg -> successful")
-            } catch (e: Exception) {
-                e.printStackTrace()
-            } finally {
-                fos?.close()
-            }
-        } else if (image.format == ImageFormat.HEIC) {
-            var fos: FileOutputStream? = null
-            try {
-                val byteBuffer = image.planes[0].buffer
-                val bytes = ByteArray(byteBuffer.remaining()).apply { byteBuffer.get(this) }
-                val file = File(
-                    getStoragePath(),
-                    "YAO_${captureTimestamp ?: System.currentTimeMillis()}.heic"
-                )
-                fos = FileOutputStream(file)
-                fos.write(bytes)
-                fos.flush()
-                outputFile = file
-                Log.i(TAG, "image: heic -> successful")
-            } catch (e: Exception) {
-                e.printStackTrace()
-            } finally {
-                fos?.close()
-            }
-        } else if (image.format == ImageFormat.RAW_SENSOR && captureResult != null) {
-            val cameraPair = currentCameraPairFlow.value
-            val cameraCharacteristics = cameraPair?.second ?: return@OnImageAvailableListener
-            var fos: FileOutputStream? = null
-            var dngCreator: DngCreator? = null
-            try {
-                dngCreator =
-                    DngCreator(cameraCharacteristics, captureResult!!)
-                val file = File(
-                    getStoragePath(),
-                    "YAO_${captureTimestamp ?: System.currentTimeMillis()}.dng"
-                )
-                fos = FileOutputStream(file)
-                val exifRotation = when (rotationOrientation.value) {
-                    90 -> ExifInterface.ORIENTATION_ROTATE_90
-                    180 -> ExifInterface.ORIENTATION_ROTATE_180
-                    270 -> ExifInterface.ORIENTATION_ROTATE_270
-                    else -> ExifInterface.ORIENTATION_NORMAL
-                }
-
-                // dng图片无法同时旋转和水平翻转
-                dngCreator.setOrientation(exifRotation)
-                dngCreator.writeImage(fos, image)
-                captureResult = null
-                outputFile = file
-            } catch (e: Exception) {
-                e.printStackTrace()
-            } finally {
-                dngCreator?.close()
-                fos?.close()
-            }
-            Log.i(TAG, "image: dng -> successful")
-        }
-        launch {
-            outputFileFlow.emit(outputFile)
-        }
-        image.close()
     }
 
     private val previewImageAvailableListener = object : ImageReader.OnImageAvailableListener {
@@ -363,7 +348,6 @@ class CameraHolder : CoroutineScope by MainScope() {
                     uByteArray = uByteBuffer,
                     vByteArray = vByteBuffer,
                 )
-
             }
 //            Log.i(TAG, "previewImageAvailableListener process frame time $time")
             image.close()
@@ -403,10 +387,8 @@ class CameraHolder : CoroutineScope by MainScope() {
         cameraDeviceFlow.value = null
     }
 
-    fun setupCamera(displayRotation: Int) {
+    fun setupCamera() {
         // 获取摄像头列表
-        // 必须先在activity中执行这一行，以确保UI中不会自己创建一个新的viewModel
-        this.displayRotation.value = displayRotation
         cameraPairListFlow.value = context.fetchCameraPairList()
 
         // 初始化选择摄像头
@@ -646,8 +628,6 @@ class CameraHolder : CoroutineScope by MainScope() {
      */
 
     private val resumeTimestampFlow = MutableStateFlow<Long?>(null)
-
-    val displayRotation = mutableStateOf(90)
 
     val rotationOrientation = mutableStateOf(0)
 

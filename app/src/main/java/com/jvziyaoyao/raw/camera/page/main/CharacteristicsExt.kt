@@ -10,18 +10,22 @@ import android.util.Size
 
 enum class OutputMode(
     val label: String,
+    val extName: String,
     val imageFormat: Int,
 ) {
     JPEG(
         label = "JPEG",
+        extName = "JPEG",
         imageFormat = ImageFormat.JPEG,
     ),
     HEIC(
         label = "HEIC",
+        extName = "HEIC",
         imageFormat = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ImageFormat.HEIC else -1,
     ),
     RAW(
         label = "RAW",
+        extName = "DNG",
         imageFormat = ImageFormat.RAW_SENSOR,
     ),
     ;

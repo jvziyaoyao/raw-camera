@@ -4,7 +4,6 @@ import android.hardware.camera2.CameraMetadata
 import android.opengl.GLSurfaceView
 import android.os.Build
 import android.os.Bundle
-import android.util.Log
 import android.view.Surface
 import android.view.ViewGroup
 import android.widget.FrameLayout
@@ -48,6 +47,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
@@ -801,11 +801,11 @@ fun CameraRawSeaLevel() {
         val displayRotation = viewModel.displayRotation
         val gravity = viewModel.gravityFlow.collectAsState()
         val gravityDegreesAnimation =
-            animateRotationAsState(targetValue = gravity.value - displayRotation.value)
+            animateRotationAsState(targetValue = gravity.value - displayRotation)
         val pitch = viewModel.pitchFlow.collectAsState()
         val roll = viewModel.rollFlow.collectAsState()
         val pitchAnimation = animateFloatAsState(targetValue = pitch.value)
-        val rollAnimation =  animateFloatAsState(targetValue = roll.value)
+        val rollAnimation = animateFloatAsState(targetValue = roll.value)
         val offsetPY = remember {
             derivedStateOf {
                 var p = pitchAnimation.value.div(90F)
@@ -842,11 +842,41 @@ fun CameraRawSeaLevel() {
                 .background(color = MaterialTheme.colorScheme.primary)
                 .align(Alignment.Center)
         )
+        val saveImageOrientation = viewModel.saveImageOrientation
+        LaunchedEffect(gravityDegreesAnimation.value) {
+            val degree = gravityDegreesAnimation.value
+            if (bubbleViewVisible.value) return@LaunchedEffect
+            if (degree in 0F..30F || degree in 330F..360F) {
+                if (saveImageOrientation.value != 0) saveImageOrientation.value = 0
+            } else if (degree in 60F..120F) {
+                if (saveImageOrientation.value != 90) saveImageOrientation.value = 90
+            } else if (degree in 150F..210F) {
+                if (saveImageOrientation.value != 180) saveImageOrientation.value = 180
+            } else if (degree in 240F..300F) {
+                if (saveImageOrientation.value != 270) saveImageOrientation.value = 270
+            }
+        }
+        Box(
+            modifier = Modifier
+                .height(80.dp)
+                .rotate(saveImageOrientation.value.toFloat())
+                .align(Alignment.Center)
+        ) {
+            Box(
+                modifier = Modifier
+                    .graphicsLayer {}
+                    .width(4.dp)
+                    .height(24.dp)
+                    .clip(CircleShape)
+                    .background(color = MaterialTheme.colorScheme.error)
+                    .align(Alignment.TopCenter)
+            )
+        }
 
         BoxWithConstraints(
             modifier = Modifier
                 .graphicsLayer {
-                    rotationZ = -displayRotation.value.toFloat()
+                    rotationZ = -displayRotation.toFloat()
                 }
                 .fillMaxWidth()
                 .aspectRatio(1F)
