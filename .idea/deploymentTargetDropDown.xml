@@ -5,6 +5,12 @@
       <entry key="app">
         <State />
       </entry>
+      <entry key="app-camera">
+        <State />
+      </entry>
+      <entry key="app-sample">
+        <State />
+      </entry>
       <entry key="sample">
         <State />
       </entry>
