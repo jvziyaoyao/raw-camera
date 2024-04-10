@@ -170,7 +170,7 @@ class CameraRawViewModel : ViewModel() {
         val extName = outputItem.outputMode.extName
         val time = System.currentTimeMillis()
         val outputFile = File(getStoragePath(), "YAO_$time.$extName")
-        cameraHolder.onCapture(
+        cameraHolder.capture(
             outputFile,
             additionalRotation = saveImageOrientation.value,
         )

@@ -124,12 +124,12 @@ class CameraViewModel: ViewModel() {
 
     fun setSurfaceView(glSurfaceView: GLSurfaceView) = cameraHolder.setSurfaceView(glSurfaceView)
 
-    suspend fun onCapture() {
+    suspend fun capture() {
         val outputItem = cameraHolder.currentOutputItemFlow.value ?: return
         val extName = outputItem.outputMode.extName
         val time = System.currentTimeMillis()
         val outputFile = File(getStoragePath(), "YAO_$time.$extName")
-        cameraHolder.onCapture(
+        cameraHolder.capture(
             outputFile,
             additionalRotation = saveImageOrientation.value,
         )

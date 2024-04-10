@@ -131,7 +131,7 @@ class CameraHolder(
         OpenCVLoader.initLocal()
     }
 
-    suspend fun onCapture(
+    suspend fun capture(
         outputFile: File? = null,
         additionalRotation: Int? = null,
     ) {

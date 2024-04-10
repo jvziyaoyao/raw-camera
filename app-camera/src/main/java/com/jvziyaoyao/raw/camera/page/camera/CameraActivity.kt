@@ -6,19 +6,19 @@ import android.os.Bundle
 import android.view.Surface
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.snapping.SnapLayoutInfoProvider
-import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -26,27 +26,22 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.PageSize
-import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.ripple.rememberRipple
-import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
-import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -61,9 +56,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -76,9 +71,7 @@ import com.jvziyaoyao.raw.camera.base.CommonPermissions
 import com.jvziyaoyao.raw.camera.base.DynamicStatusBarColor
 import com.jvziyaoyao.raw.camera.base.animateRotationAsState
 import com.jvziyaoyao.raw.camera.ui.theme.Layout
-import com.jvziyaoyao.raw.camera.ui.theme.PrimaryDarkFull
 import dev.chrisbanes.snapper.ExperimentalSnapperApi
-import dev.chrisbanes.snapper.SnapOffsets
 import dev.chrisbanes.snapper.rememberSnapperFlingBehavior
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
@@ -101,26 +94,20 @@ class CameraActivity : BaseActivity() {
             else -> 0
         }
 
-    @OptIn(ExperimentalSnapperApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         mViewModel.setupSensor()
         mViewModel.setupCamera(displayRotation)
 
         setBasicContent {
-            CompositionLocalProvider(
-                LocalTextStyle provides LocalTextStyle.current.copy(color = MaterialTheme.colorScheme.surface),
-                LocalContentColor provides MaterialTheme.colorScheme.surface,
-            ) {
-                DynamicStatusBarColor(dark = false)
-                CommonPermissions(
-                    permissions = cameraRequirePermissions,
-                    onPermissionChange = {
-                        mViewModel.onPermissionChanged(it)
-                    }
-                ) {
-                    CameraBody()
+            DynamicStatusBarColor(dark = false)
+            CommonPermissions(
+                permissions = cameraRequirePermissions,
+                onPermissionChange = {
+                    mViewModel.onPermissionChanged(it)
                 }
+            ) {
+                CameraBody()
             }
         }
     }
@@ -141,10 +128,12 @@ class CameraActivity : BaseActivity() {
 
 @Composable
 fun CameraBody() {
+    val scope = rememberCoroutineScope()
+    val viewModel: CameraViewModel = koinViewModel()
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.onBackground)
+            .background(MaterialTheme.colorScheme.surface)
     ) {
         Spacer(modifier = Modifier.statusBarsPadding())
         Box(
@@ -167,6 +156,7 @@ fun CameraBody() {
         CameraPreviewLayer(
             foreground = {
                 CameraGridIndicator()
+                CameraCaptureInfoLayer()
                 CameraSeaLevelIndicator()
             }
         )
@@ -183,27 +173,67 @@ fun CameraBody() {
                     .fillMaxWidth()
                     .weight(1F)
             ) {
-                val borderPadding = 6.dp
                 Box(
                     modifier = Modifier
                         .size(68.dp)
-                        .border(
-                            width = borderPadding,
-                            color = MaterialTheme.colorScheme.surface.copy(0.4F),
-                            shape = CircleShape,
-                        )
-                        .padding(borderPadding)
-                        .clip(CircleShape)
-                        .background(color = MaterialTheme.colorScheme.surface)
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = rememberRipple(color = MaterialTheme.colorScheme.primary)
-                        ) {
-
-                        }
                         .align(Alignment.Center)
-                )
+                ) {
+                    val borderPadding = 6.dp
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = viewModel.captureLoading.value,
+                        enter = fadeIn(),
+                        exit = fadeOut(),
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .align(Alignment.Center),
+                            strokeWidth = borderPadding,
+                            color = MaterialTheme.colorScheme.onBackground.copy(0.4F),
+                        )
+                    }
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = !viewModel.captureLoading.value,
+                        enter = fadeIn(),
+                        exit = fadeOut(),
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .align(Alignment.Center),
+                            strokeWidth = borderPadding,
+                            progress = 100F,
+                            color = MaterialTheme.colorScheme.onBackground.copy(0.4F),
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(borderPadding)
+                            .clip(CircleShape)
+                            .background(color = MaterialTheme.colorScheme.onBackground)
+                            .clickable(
+                                enabled = !viewModel.captureLoading.value,
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = rememberRipple(color = MaterialTheme.colorScheme.primary)
+                            ) {
+                                scope.launch {
+                                    viewModel.captureLoading.value = true
+                                    try {
+                                        viewModel.capture()
+                                    } catch (e: Exception) {
+                                        e.printStackTrace()
+                                    } finally {
+                                        viewModel.captureLoading.value = false
+                                    }
+                                }
+                            }
+                    )
+                }
             }
+
+            Spacer(modifier = Modifier.navigationBarsPadding())
         }
     }
 }
@@ -257,7 +287,7 @@ fun CameraPictureModeRow() {
                             .align(Alignment.Center),
                         text = pictureMode.label,
                         textAlign = TextAlign.Center,
-                        color = if (centerIndex == index) PrimaryDarkFull else LocalContentColor.current,
+                        color = if (centerIndex == index) MaterialTheme.colorScheme.primary else LocalContentColor.current,
                     )
                 }
             }
@@ -301,12 +331,99 @@ fun CameraPreviewLayer(
 }
 
 @Composable
+fun CameraCaptureInfoLayer() {
+    val viewModel: CameraViewModel = koinViewModel()
+    val currentOutputItem = viewModel.currentOutputItemFlow.collectAsState()
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(Layout.padding.ps)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            val backgroundColor = MaterialTheme.colorScheme.onBackground.copy(0.4F)
+            val lineColor = MaterialTheme.colorScheme.background.copy(0.6F)
+
+            CompositionLocalProvider(LocalContentColor provides lineColor) {
+                currentOutputItem.value?.apply {
+                    Column(
+                        modifier = Modifier
+                            .clip(Layout.roundShape.rs)
+                            .background(backgroundColor)
+                            .clickable {
+
+                            }
+                            .padding(
+                                horizontal = Layout.padding.ps,
+                                vertical = Layout.padding.pxs,
+                            )
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(text = outputMode.label, color = LocalContentColor.current)
+                            Spacer(modifier = Modifier.width(Layout.padding.pxxs))
+                            Icon(
+                                modifier = Modifier.size(12.dp),
+                                imageVector = Icons.Filled.ArrowDropDown,
+                                contentDescription = null
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(Layout.padding.pxxs))
+                        Text(
+                            text = "${bestSize.width}x${bestSize.height}",
+                            fontSize = Layout.fontSize.fxs,
+                            color = LocalContentColor.current.copy(0.6F),
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.weight(1F))
+
+            val exposureHistogramData = viewModel.exposureHistogramDataFlow.collectAsState()
+            if (exposureHistogramData.value != null) {
+                Canvas(
+                    modifier = Modifier
+                        .clip(Layout.roundShape.rs)
+                        .background(backgroundColor)
+                        .padding(Layout.padding.ps)
+                        .width(100.dp)
+                        .height(50.dp),
+                    onDraw = {
+                        val histData = exposureHistogramData.value!!
+                        val histSize = histData.size
+                        val maxValue = histData.maxOrNull() ?: 1.0f // 避免除以零
+                        val scaleY = size.height / maxValue
+                        val binWidth = size.width / histSize
+                        var prevX = 0f
+                        var prevY = size.height
+                        for (i in 0 until histSize) {
+                            val x = i * binWidth
+                            val y = size.height - histData[i] * scaleY
+                            drawLine(
+                                color = lineColor,
+                                strokeWidth = 2F,
+                                start = Offset(prevX, prevY),
+                                end = Offset(x, y)
+                            )
+                            prevX = x
+                            prevY = y
+                        }
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
 fun CameraGridIndicator() {
     val density = LocalDensity.current
     val borderDarkWidth = density.run { 1F.toDp() }
-    val borderDarkColor = MaterialTheme.colorScheme.onBackground.copy(0.28F)
+    val borderDarkColor = Color.Black.copy(0.28F)
     val borderLightWidth = density.run { 2F.toDp() }
-    val borderLightColor = MaterialTheme.colorScheme.surface.copy(0.46F)
+    val borderLightColor = Color.White.copy(0.46F)
     Box(modifier = Modifier.fillMaxSize()) {
         Row(modifier = Modifier.fillMaxSize()) {
             @Composable
@@ -398,13 +515,16 @@ fun CameraSeaLevelIndicator() {
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
+        val circleSize = 72.dp
+        val borderWidth = 1.2.dp
+        val downColor = Color.White.copy(0.2F)
         Box(
             modifier = Modifier
-                .size(80.dp)
+                .size(circleSize)
                 .clip(CircleShape)
                 .border(
-                    width = 2.dp,
-                    color = MaterialTheme.colorScheme.onBackground.copy(0.2F),
+                    width = borderWidth,
+                    color = downColor,
                     shape = CircleShape,
                 )
                 .align(Alignment.Center),
@@ -448,10 +568,10 @@ fun CameraSeaLevelIndicator() {
                     rotationZ = gravityDegreesAnimation.value
                     alpha = 1 - bubbleAlphaAnimation.value
                 }
-                .width(100.dp)
-                .height(4.dp)
+                .width(circleSize.times(1.4F))
+                .height(borderWidth)
                 .clip(CircleShape)
-                .background(color = MaterialTheme.colorScheme.primary)
+                .background(color = Color.White.copy(0.8F))
                 .align(Alignment.Center)
         )
         val saveImageOrientation = viewModel.saveImageOrientation
@@ -468,21 +588,61 @@ fun CameraSeaLevelIndicator() {
                 if (saveImageOrientation.value != 270) saveImageOrientation.value = 270
             }
         }
+        val saveImageOrientationAnimation = animateFloatAsState(
+            targetValue = saveImageOrientation.value.toFloat(),
+            animationSpec = tween(durationMillis = 600, easing = LinearEasing)
+        )
+        val crossLength = circleSize.times(0.48F)
+
         Box(
             modifier = Modifier
-                .height(80.dp)
-                .rotate(saveImageOrientation.value.toFloat())
+                .width(crossLength)
+                .height(borderWidth)
+                .background(downColor)
                 .align(Alignment.Center)
+        )
+        Box(
+            modifier = Modifier
+                .height(crossLength)
+                .width(borderWidth)
+                .background(downColor)
+                .align(Alignment.Center)
+        )
+        Box(
+            modifier = Modifier
+                .rotate(saveImageOrientationAnimation.value)
+                .size(circleSize.times(1.4F))
+                .align(Alignment.Center),
         ) {
             Box(
                 modifier = Modifier
-                    .graphicsLayer {}
-                    .width(4.dp)
-                    .height(24.dp)
-                    .clip(CircleShape)
-                    .background(color = MaterialTheme.colorScheme.error)
-                    .align(Alignment.TopCenter)
+                    .width(circleSize.times(0.2F))
+                    .height(borderWidth)
+                    .background(downColor)
+                    .align(Alignment.CenterStart)
             )
+            Box(
+                modifier = Modifier
+                    .width(circleSize.times(0.2F))
+                    .height(borderWidth)
+                    .background(downColor)
+                    .align(Alignment.CenterEnd)
+            )
+            Box(
+                modifier = Modifier
+                    .size(crossLength)
+                    .align(Alignment.Center)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .graphicsLayer {}
+                        .width(borderWidth)
+                        .height(crossLength.div(2))
+                        .clip(CircleShape)
+                        .background(color = MaterialTheme.colorScheme.error)
+                        .align(Alignment.TopCenter)
+                )
+            }
         }
 
         BoxWithConstraints(
@@ -511,9 +671,13 @@ fun CameraSeaLevelIndicator() {
                         translationY = offsetY.value
                         alpha = bubbleAlphaAnimation.value
                     }
-                    .size(60.dp)
+                    .size(circleSize)
                     .clip(CircleShape)
-                    .background(color = MaterialTheme.colorScheme.onBackground.copy(0.2F))
+                    .border(
+                        width = borderWidth,
+                        color = Color.White.copy(0.48F),
+                        shape = CircleShape
+                    )
                     .align(Alignment.Center)
             )
         }
