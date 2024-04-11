@@ -12,9 +12,11 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,18 +36,10 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AcUnit
-import androidx.compose.material.icons.filled.AreaChart
 import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.DataSaverOn
-import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Texture
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.ripple.rememberRipple
 import androidx.compose.material3.CircularProgressIndicator
@@ -68,25 +62,24 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.jvziyaoyao.camera.raw.holder.camera.cameraRequirePermissions
 import com.jvziyaoyao.camera.raw.holder.camera.defaultSensorAspectRatio
-import com.jvziyaoyao.camera.raw.holder.camera.outputSupportedMode
+import com.jvziyaoyao.camera.raw.holder.camera.faceDetectResult
+import com.jvziyaoyao.camera.raw.holder.camera.isFrontCamera
 import com.jvziyaoyao.camera.raw.holder.camera.sensorAspectRatio
+import com.jvziyaoyao.camera.raw.holder.camera.sensorDetectRect2ComposeRect
+import com.jvziyaoyao.camera.raw.holder.camera.sensorSize
 import com.jvziyaoyao.raw.camera.base.BaseActivity
 import com.jvziyaoyao.raw.camera.base.CommonPermissions
 import com.jvziyaoyao.raw.camera.base.DynamicStatusBarColor
-import com.jvziyaoyao.raw.camera.base.FlatActionSheet
-import com.jvziyaoyao.raw.camera.base.LocalPopupState
 import com.jvziyaoyao.raw.camera.base.animateRotationAsState
 import com.jvziyaoyao.raw.camera.ui.theme.Layout
-import dev.chrisbanes.snapper.ExperimentalSnapperApi
-import dev.chrisbanes.snapper.rememberSnapperFlingBehavior
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.androidx.viewmodel.ext.android.viewModel
@@ -143,10 +136,7 @@ class CameraActivity : BaseActivity() {
 @Composable
 fun CameraBody() {
     val viewModel: CameraViewModel = koinViewModel()
-    val popupState = LocalPopupState.current
-    popupState.popupMap["camera_body"] = {
-        CameraSettingActionSheet()
-    }
+    CameraPopup()
 
     Column(
         modifier = Modifier
@@ -159,6 +149,7 @@ fun CameraBody() {
         CameraPreviewLayer(
             foreground = {
                 if (viewModel.gridEnable.value) CameraGridIndicator()
+                CameraFaceDetectLayer()
                 CameraCaptureInfoLayer()
                 if (viewModel.levelIndicatorEnable.value) CameraSeaLevelIndicator()
             }
@@ -173,198 +164,6 @@ fun CameraBody() {
         }
 
         Spacer(modifier = Modifier.navigationBarsPadding())
-    }
-}
-
-@Composable
-fun CameraSettingActionSheet() {
-    val viewModel: CameraViewModel = koinViewModel()
-    val showCameraSetting = viewModel.showCameraSetting
-    FlatActionSheet(
-        showDialog = showCameraSetting.value, onDismissRequest = {
-            showCameraSetting.value = false
-        }
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.68F)
-                .clip(Layout.roundShape.rl)
-                .background(MaterialTheme.colorScheme.background)
-                .padding(
-                    start = Layout.padding.pl,
-                    end = Layout.padding.pl,
-                    top = Layout.padding.pl,
-                )
-        ) {
-            val buttonBackground = MaterialTheme.colorScheme.onBackground.copy(0.2F)
-            val selectedContentColor = MaterialTheme.colorScheme.onPrimary
-            val labelColor = LocalContentColor.current.copy(0.6F)
-            val labelFontSize = Layout.fontSize.fxs
-            val cameraCharacteristics = viewModel.currentCameraCharacteristicsFlow
-                .collectAsState(initial = null)
-            cameraCharacteristics.value?.apply {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                ) {
-                    Spacer(modifier = Modifier.height(Layout.padding.pl))
-
-                    Text(
-                        text = "拍摄格式",
-                        fontSize = labelFontSize,
-                        color = labelColor,
-                    )
-                    Spacer(modifier = Modifier.height(Layout.padding.ps))
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(Layout.roundShape.rm)
-                            .background(buttonBackground)
-                            .padding(Layout.padding.pxs),
-                        horizontalArrangement = Arrangement.spacedBy(Layout.padding.pm)
-                    ) {
-                        val currentOutputItem = viewModel.currentOutputItemFlow.collectAsState()
-                        outputSupportedMode.forEach { outputItem ->
-                            val isCurrentItem =
-                                outputItem.outputMode == currentOutputItem.value?.outputMode
-                            Box(
-                                modifier = Modifier
-                                    .weight(1F)
-                                    .clip(RoundedCornerShape(8.8.dp))
-                                    .run {
-                                        if (isCurrentItem) {
-                                            background(MaterialTheme.colorScheme.primary)
-                                        } else this
-                                    }
-                                    .clickable {
-                                        viewModel.currentOutputItemFlow.value = outputItem
-                                    }
-                                    .padding(vertical = Layout.padding.ps)
-                            ) {
-                                val contentColor =
-                                    if (isCurrentItem) selectedContentColor else LocalContentColor.current
-                                Column(modifier = Modifier.align(Alignment.Center)) {
-                                    Text(
-                                        text = outputItem.outputMode.label,
-                                        fontSize = Layout.fontSize.fs,
-                                        color = contentColor
-                                    )
-                                    Text(
-                                        text = "${outputItem.bestSize.width}x${outputItem.bestSize.height}",
-                                        fontSize = Layout.fontSize.fxs,
-                                        color = contentColor.copy(0.6F)
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(Layout.padding.pxl))
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(Layout.padding.pm)
-                    ) {
-                        @Composable
-                        fun RowItem(
-                            label: String,
-                            icon: ImageVector,
-                            selected: Boolean,
-                            onClick: () -> Unit,
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .weight(1F),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .aspectRatio(1F)
-                                        .clip(Layout.roundShape.rm)
-                                        .background(
-                                            if (selected) MaterialTheme.colorScheme.primary else buttonBackground
-                                        )
-                                        .clickable(onClick = onClick)
-                                ) {
-                                    Icon(
-                                        modifier = Modifier.align(Alignment.Center),
-                                        imageVector = icon,
-                                        contentDescription = null,
-                                        tint = if (selected) selectedContentColor else LocalContentColor.current,
-                                    )
-                                }
-                                Spacer(modifier = Modifier.height(Layout.padding.ps))
-                                Text(
-                                    text = label,
-                                    fontSize = labelFontSize,
-                                    color = labelColor
-                                )
-                            }
-                        }
-
-                        val gridEnable = viewModel.gridEnable
-                        RowItem(
-                            label = "网格",
-                            icon = Icons.Filled.GridOn,
-                            selected = gridEnable.value,
-                            onClick = {
-                                gridEnable.value = !gridEnable.value
-                            }
-                        )
-
-                        val levelIndicatorEnable = viewModel.levelIndicatorEnable
-                        RowItem(
-                            label = "水平仪",
-                            icon = Icons.Filled.DataSaverOn,
-                            selected = levelIndicatorEnable.value,
-                            onClick = {
-                                levelIndicatorEnable.value = !levelIndicatorEnable.value
-                            }
-                        )
-
-                        val exposureHistogramEnable =
-                            viewModel.exposureHistogramEnableFlow.collectAsState()
-                        RowItem(
-                            label = "直方图",
-                            icon = Icons.Filled.AreaChart,
-                            selected = exposureHistogramEnable.value,
-                            onClick = {
-                                viewModel.exposureHistogramEnableFlow.value =
-                                    !exposureHistogramEnable.value
-                            }
-                        )
-
-                        val focusPeakingEnable =
-                            viewModel.focusPeakingEnableFlow.collectAsState()
-                        RowItem(
-                            label = "峰值对焦",
-                            icon = Icons.Filled.AcUnit,
-                            selected = focusPeakingEnable.value,
-                            onClick = {
-                                viewModel.focusPeakingEnableFlow.value =
-                                    !focusPeakingEnable.value
-                            }
-                        )
-
-                        val brightnessPeakingEnable =
-                            viewModel.brightnessPeakingEnableFlow.collectAsState()
-                        RowItem(
-                            label = "峰值亮度",
-                            icon = Icons.Filled.Texture,
-                            selected = brightnessPeakingEnable.value,
-                            onClick = {
-                                viewModel.brightnessPeakingEnableFlow.value =
-                                    !brightnessPeakingEnable.value
-                            }
-                        )
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -436,7 +235,8 @@ fun CameraActionFooter() {
                         modifier = Modifier
                             .fillMaxSize(0.6F)
                             .align(Alignment.Center),
-                        imageVector = Icons.Outlined.Refresh, contentDescription = null)
+                        imageVector = Icons.Outlined.Refresh, contentDescription = null
+                    )
                 }
             }
             Box(
@@ -517,7 +317,7 @@ enum class PictureMode(
     ;
 }
 
-@OptIn(ExperimentalSnapperApi::class)
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun CameraPictureModeRow() {
     val scope = rememberCoroutineScope()
@@ -533,7 +333,7 @@ fun CameraPictureModeRow() {
         }
         LazyRow(
             state = lazyListState,
-            flingBehavior = rememberSnapperFlingBehavior(lazyListState),
+            flingBehavior = rememberSnapFlingBehavior(lazyListState),
         ) {
             items(itemEmptyCount) {
                 Spacer(modifier = Modifier.width(itemWidth))
@@ -598,6 +398,42 @@ fun CameraPreviewLayer(
 }
 
 @Composable
+fun CameraFaceDetectLayer() {
+    Box(modifier = Modifier.fillMaxSize()) {
+        val viewModel: CameraViewModel = koinViewModel()
+        val currentCameraPair = viewModel.currentCameraPairFlow.collectAsState()
+        val cameraCharacteristics = currentCameraPair.value?.second
+        val captureResult = viewModel.captureResultFlow.collectAsState()
+        captureResult.value?.faceDetectResult
+        cameraCharacteristics?.apply {
+            if (sensorSize != null) {
+                val sensorWidth = sensorSize!!.width()
+                val sensorHeight = sensorSize!!.height()
+                val rectColor = MaterialTheme.colorScheme.primary
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    captureResult.value?.faceDetectResult?.forEach {
+                        val faceRect = sensorDetectRect2ComposeRect(
+                            rect = it.bounds,
+                            rotationOrientation = viewModel.rotationOrientation.value,
+                            flipHorizontal = isFrontCamera,
+                            size = size,
+                            sensorWidth = sensorWidth,
+                            sensorHeight = sensorHeight,
+                        )
+                        drawRect(
+                            color = rectColor,
+                            topLeft = faceRect.topLeft,
+                            size = faceRect.size,
+                            style = Stroke(width = 4F)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun CameraCaptureInfoLayer() {
     val viewModel: CameraViewModel = koinViewModel()
     val currentOutputItem = viewModel.currentOutputItemFlow.collectAsState()
@@ -629,7 +465,11 @@ fun CameraCaptureInfoLayer() {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(text = outputMode.label, color = LocalContentColor.current)
+                            Text(
+                                text = outputMode.label,
+                                color = LocalContentColor.current,
+                                fontSize = Layout.fontSize.fs
+                            )
                             Spacer(modifier = Modifier.width(Layout.padding.pxxs))
                             Icon(
                                 modifier = Modifier.size(12.dp),
@@ -637,10 +477,9 @@ fun CameraCaptureInfoLayer() {
                                 contentDescription = null
                             )
                         }
-                        Spacer(modifier = Modifier.height(Layout.padding.pxxs))
                         Text(
                             text = "${bestSize.width}x${bestSize.height}",
-                            fontSize = Layout.fontSize.fxs,
+                            fontSize = Layout.fontSize.fxxs,
                             color = LocalContentColor.current.copy(0.6F),
                         )
                     }
