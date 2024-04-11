@@ -194,13 +194,15 @@ fun Context.fetchCameraPairList(): List<CameraPair> {
 }
 
 // 选择一个默认的摄像头
-fun chooseDefaultCameraPair(list: List<CameraPair>): CameraPair? {
+fun chooseDefaultCameraPair(
+    list: List<CameraPair>,
+    facing: Int = CameraMetadata.LENS_FACING_BACK,
+): CameraPair? {
     val frontCameraList = list.filter {
-        val facing =
+        val currentFacing =
             it.second.get(CameraCharacteristics.LENS_FACING)
-                ?: CameraMetadata.LENS_FACING_FRONT
-        facing == CameraMetadata.LENS_FACING_BACK
-//        facing == CameraMetadata.LENS_FACING_FRONT
+                ?: CameraMetadata.LENS_FACING_BACK
+        currentFacing == facing
     }
     return if (frontCameraList.isNotEmpty()) {
         frontCameraList.first()

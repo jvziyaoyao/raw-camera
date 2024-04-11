@@ -42,10 +42,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AcUnit
 import androidx.compose.material.icons.filled.AreaChart
 import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.BorderHorizontal
+import androidx.compose.material.icons.filled.DataSaverOn
 import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Texture
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.ripple.rememberRipple
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -199,7 +200,7 @@ fun CameraSettingActionSheet() {
             val buttonBackground = MaterialTheme.colorScheme.onBackground.copy(0.2F)
             val selectedContentColor = MaterialTheme.colorScheme.onPrimary
             val labelColor = LocalContentColor.current.copy(0.6F)
-            val labelFontSize = Layout.fontSize.fs
+            val labelFontSize = Layout.fontSize.fxs
             val cameraCharacteristics = viewModel.currentCameraCharacteristicsFlow
                 .collectAsState(initial = null)
             cameraCharacteristics.value?.apply {
@@ -318,7 +319,7 @@ fun CameraSettingActionSheet() {
                         val levelIndicatorEnable = viewModel.levelIndicatorEnable
                         RowItem(
                             label = "水平仪",
-                            icon = Icons.Filled.BorderHorizontal,
+                            icon = Icons.Filled.DataSaverOn,
                             selected = levelIndicatorEnable.value,
                             onClick = {
                                 levelIndicatorEnable.value = !levelIndicatorEnable.value
@@ -400,15 +401,47 @@ fun CameraActionFooter() {
         Spacer(modifier = Modifier.height(Layout.padding.ps))
         CameraPictureModeRow()
 
-        Box(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1F)
+                .padding(horizontal = Layout.padding.pxl),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceAround,
         ) {
+            @Composable
+            fun SideCircleWrap(
+                onClick: () -> Unit,
+                content: @Composable () -> Unit,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.onBackground.copy(0.2F))
+                        .clickable(
+                            onClick = onClick,
+                        )
+                ) {
+                    content()
+                }
+            }
+            SideCircleWrap(
+                onClick = {
+                    viewModel.switchCamera()
+                }
+            ) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    Icon(
+                        modifier = Modifier
+                            .fillMaxSize(0.6F)
+                            .align(Alignment.Center),
+                        imageVector = Icons.Outlined.Refresh, contentDescription = null)
+                }
+            }
             Box(
                 modifier = Modifier
                     .size(68.dp)
-                    .align(Alignment.Center)
             ) {
                 val borderPadding = 6.dp
                 androidx.compose.animation.AnimatedVisibility(
@@ -463,6 +496,11 @@ fun CameraActionFooter() {
                         }
                 )
             }
+            SideCircleWrap(
+                onClick = {
+
+                }
+            ) {}
         }
     }
 }

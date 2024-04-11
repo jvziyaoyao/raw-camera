@@ -1,11 +1,14 @@
 package com.jvziyaoyao.raw.camera.page.camera
 
+import android.hardware.camera2.CameraMetadata
 import android.opengl.GLSurfaceView
 import android.os.Environment
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.geometry.Rect
 import androidx.lifecycle.ViewModel
 import com.jvziyaoyao.camera.raw.holder.camera.CameraHolder
+import com.jvziyaoyao.camera.raw.holder.camera.chooseDefaultCameraPair
+import com.jvziyaoyao.camera.raw.holder.camera.isFrontCamera
 import com.jvziyaoyao.camera.raw.holder.sensor.SensorHolder
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
@@ -172,7 +175,7 @@ class CameraViewModel : ViewModel() {
 
     val saveImageOrientation = mutableStateOf(0)
 
-    val showCameraSetting = mutableStateOf(true)
+    val showCameraSetting = mutableStateOf(false)
 
     val gridEnable = mutableStateOf(true)
 
@@ -180,6 +183,26 @@ class CameraViewModel : ViewModel() {
 
     fun showSetting() {
         showCameraSetting.value = true
+    }
+
+    fun switchCamera() {
+        val cameraPair = currentCameraPairFlow.value
+        val cameraCharacteristics = cameraPair?.second
+        val cameraPairList = cameraPairListFlow.value
+        if (cameraCharacteristics == null) {
+            if (cameraPairList.isNotEmpty()) {
+                currentCameraPairFlow.value = cameraPairList.first()
+            }
+        } else {
+            val nextCameraPair = if (cameraCharacteristics.isFrontCamera) {
+                chooseDefaultCameraPair(cameraPairList, CameraMetadata.LENS_FACING_BACK)
+            } else {
+                chooseDefaultCameraPair(cameraPairList, CameraMetadata.LENS_FACING_FRONT)
+            }
+            if (nextCameraPair != null) {
+                currentCameraPairFlow.value = nextCameraPair
+            }
+        }
     }
 
 }
