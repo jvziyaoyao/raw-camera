@@ -52,6 +52,9 @@ android {
 dependencies {
     implementation(project(":lib-raw"))
 
+    // https://mvnrepository.com/artifact/androidx.compose.material/material-icons-extended
+    implementation("androidx.compose.material:material-icons-extended:1.7.0-alpha06")
+
     implementation("dev.chrisbanes.snapper:snapper:0.3.0")
 
     val accompanist_version = "0.24.1-alpha"

@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModel
 import com.jvziyaoyao.camera.raw.holder.camera.CameraHolder
 import com.jvziyaoyao.camera.raw.holder.sensor.SensorHolder
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.map
 import java.io.File
 
 data class FocusRequestOrientation(
@@ -17,7 +18,7 @@ data class FocusRequestOrientation(
     var timestamp: Long = System.currentTimeMillis(),
 )
 
-class CameraViewModel: ViewModel() {
+class CameraViewModel : ViewModel() {
 
     /**
      *
@@ -56,6 +57,9 @@ class CameraViewModel: ViewModel() {
 
     val currentCameraPairFlow
         get() = cameraHolder.currentCameraPairFlow
+
+    val currentCameraCharacteristicsFlow
+        get() = currentCameraPairFlow.map { it?.second }
 
     val cameraPairListFlow
         get() = cameraHolder.cameraPairListFlow
@@ -167,5 +171,15 @@ class CameraViewModel: ViewModel() {
     val focusPointRectFlow = MutableStateFlow<Rect?>(null)
 
     val saveImageOrientation = mutableStateOf(0)
+
+    val showCameraSetting = mutableStateOf(true)
+
+    val gridEnable = mutableStateOf(true)
+
+    val levelIndicatorEnable = mutableStateOf(true)
+
+    fun showSetting() {
+        showCameraSetting.value = true
+    }
 
 }

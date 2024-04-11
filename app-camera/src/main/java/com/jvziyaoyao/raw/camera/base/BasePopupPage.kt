@@ -200,7 +200,7 @@ fun FlatActionSheet(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.onBackground.copy(0.72F))
+                    .background(MaterialTheme.colorScheme.background.copy(0.72F))
                     .pointerInput(Unit) {
                         detectTapGestures {
                             onDismissRequest()

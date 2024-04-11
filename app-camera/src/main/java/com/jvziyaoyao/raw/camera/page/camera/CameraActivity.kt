@@ -16,6 +16,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -33,10 +34,18 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AcUnit
+import androidx.compose.material.icons.filled.AreaChart
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.BorderHorizontal
+import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Texture
 import androidx.compose.material.ripple.rememberRipple
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -59,16 +68,20 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.jvziyaoyao.camera.raw.holder.camera.cameraRequirePermissions
 import com.jvziyaoyao.camera.raw.holder.camera.defaultSensorAspectRatio
+import com.jvziyaoyao.camera.raw.holder.camera.outputSupportedMode
 import com.jvziyaoyao.camera.raw.holder.camera.sensorAspectRatio
 import com.jvziyaoyao.raw.camera.base.BaseActivity
 import com.jvziyaoyao.raw.camera.base.CommonPermissions
 import com.jvziyaoyao.raw.camera.base.DynamicStatusBarColor
+import com.jvziyaoyao.raw.camera.base.FlatActionSheet
+import com.jvziyaoyao.raw.camera.base.LocalPopupState
 import com.jvziyaoyao.raw.camera.base.animateRotationAsState
 import com.jvziyaoyao.raw.camera.ui.theme.Layout
 import dev.chrisbanes.snapper.ExperimentalSnapperApi
@@ -128,112 +141,328 @@ class CameraActivity : BaseActivity() {
 
 @Composable
 fun CameraBody() {
+    val viewModel: CameraViewModel = koinViewModel()
+    val popupState = LocalPopupState.current
+    popupState.popupMap["camera_body"] = {
+        CameraSettingActionSheet()
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        Spacer(modifier = Modifier.statusBarsPadding())
+        CameraActionHeader()
+
+        CameraPreviewLayer(
+            foreground = {
+                if (viewModel.gridEnable.value) CameraGridIndicator()
+                CameraCaptureInfoLayer()
+                if (viewModel.levelIndicatorEnable.value) CameraSeaLevelIndicator()
+            }
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1F)
+        ) {
+            CameraActionFooter()
+        }
+
+        Spacer(modifier = Modifier.navigationBarsPadding())
+    }
+}
+
+@Composable
+fun CameraSettingActionSheet() {
+    val viewModel: CameraViewModel = koinViewModel()
+    val showCameraSetting = viewModel.showCameraSetting
+    FlatActionSheet(
+        showDialog = showCameraSetting.value, onDismissRequest = {
+            showCameraSetting.value = false
+        }
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.68F)
+                .clip(Layout.roundShape.rl)
+                .background(MaterialTheme.colorScheme.background)
+                .padding(
+                    start = Layout.padding.pl,
+                    end = Layout.padding.pl,
+                    top = Layout.padding.pl,
+                )
+        ) {
+            val buttonBackground = MaterialTheme.colorScheme.onBackground.copy(0.2F)
+            val selectedContentColor = MaterialTheme.colorScheme.onPrimary
+            val labelColor = LocalContentColor.current.copy(0.6F)
+            val labelFontSize = Layout.fontSize.fs
+            val cameraCharacteristics = viewModel.currentCameraCharacteristicsFlow
+                .collectAsState(initial = null)
+            cameraCharacteristics.value?.apply {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    Spacer(modifier = Modifier.height(Layout.padding.pl))
+
+                    Text(
+                        text = "拍摄格式",
+                        fontSize = labelFontSize,
+                        color = labelColor,
+                    )
+                    Spacer(modifier = Modifier.height(Layout.padding.ps))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(Layout.roundShape.rm)
+                            .background(buttonBackground)
+                            .padding(Layout.padding.pxs),
+                        horizontalArrangement = Arrangement.spacedBy(Layout.padding.pm)
+                    ) {
+                        val currentOutputItem = viewModel.currentOutputItemFlow.collectAsState()
+                        outputSupportedMode.forEach { outputItem ->
+                            val isCurrentItem =
+                                outputItem.outputMode == currentOutputItem.value?.outputMode
+                            Box(
+                                modifier = Modifier
+                                    .weight(1F)
+                                    .clip(RoundedCornerShape(8.8.dp))
+                                    .run {
+                                        if (isCurrentItem) {
+                                            background(MaterialTheme.colorScheme.primary)
+                                        } else this
+                                    }
+                                    .clickable {
+                                        viewModel.currentOutputItemFlow.value = outputItem
+                                    }
+                                    .padding(vertical = Layout.padding.ps)
+                            ) {
+                                val contentColor =
+                                    if (isCurrentItem) selectedContentColor else LocalContentColor.current
+                                Column(modifier = Modifier.align(Alignment.Center)) {
+                                    Text(
+                                        text = outputItem.outputMode.label,
+                                        fontSize = Layout.fontSize.fs,
+                                        color = contentColor
+                                    )
+                                    Text(
+                                        text = "${outputItem.bestSize.width}x${outputItem.bestSize.height}",
+                                        fontSize = Layout.fontSize.fxs,
+                                        color = contentColor.copy(0.6F)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(Layout.padding.pxl))
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(Layout.padding.pm)
+                    ) {
+                        @Composable
+                        fun RowItem(
+                            label: String,
+                            icon: ImageVector,
+                            selected: Boolean,
+                            onClick: () -> Unit,
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .weight(1F),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .aspectRatio(1F)
+                                        .clip(Layout.roundShape.rm)
+                                        .background(
+                                            if (selected) MaterialTheme.colorScheme.primary else buttonBackground
+                                        )
+                                        .clickable(onClick = onClick)
+                                ) {
+                                    Icon(
+                                        modifier = Modifier.align(Alignment.Center),
+                                        imageVector = icon,
+                                        contentDescription = null,
+                                        tint = if (selected) selectedContentColor else LocalContentColor.current,
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(Layout.padding.ps))
+                                Text(
+                                    text = label,
+                                    fontSize = labelFontSize,
+                                    color = labelColor
+                                )
+                            }
+                        }
+
+                        val gridEnable = viewModel.gridEnable
+                        RowItem(
+                            label = "网格",
+                            icon = Icons.Filled.GridOn,
+                            selected = gridEnable.value,
+                            onClick = {
+                                gridEnable.value = !gridEnable.value
+                            }
+                        )
+
+                        val levelIndicatorEnable = viewModel.levelIndicatorEnable
+                        RowItem(
+                            label = "水平仪",
+                            icon = Icons.Filled.BorderHorizontal,
+                            selected = levelIndicatorEnable.value,
+                            onClick = {
+                                levelIndicatorEnable.value = !levelIndicatorEnable.value
+                            }
+                        )
+
+                        val exposureHistogramEnable =
+                            viewModel.exposureHistogramEnableFlow.collectAsState()
+                        RowItem(
+                            label = "直方图",
+                            icon = Icons.Filled.AreaChart,
+                            selected = exposureHistogramEnable.value,
+                            onClick = {
+                                viewModel.exposureHistogramEnableFlow.value =
+                                    !exposureHistogramEnable.value
+                            }
+                        )
+
+                        val focusPeakingEnable =
+                            viewModel.focusPeakingEnableFlow.collectAsState()
+                        RowItem(
+                            label = "峰值对焦",
+                            icon = Icons.Filled.AcUnit,
+                            selected = focusPeakingEnable.value,
+                            onClick = {
+                                viewModel.focusPeakingEnableFlow.value =
+                                    !focusPeakingEnable.value
+                            }
+                        )
+
+                        val brightnessPeakingEnable =
+                            viewModel.brightnessPeakingEnableFlow.collectAsState()
+                        RowItem(
+                            label = "峰值亮度",
+                            icon = Icons.Filled.Texture,
+                            selected = brightnessPeakingEnable.value,
+                            onClick = {
+                                viewModel.brightnessPeakingEnableFlow.value =
+                                    !brightnessPeakingEnable.value
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun CameraActionHeader() {
+    val viewModel: CameraViewModel = koinViewModel()
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(Layout.padding.pxs)
+    ) {
+        IconButton(
+            modifier = Modifier.align(Alignment.CenterEnd),
+            onClick = {
+                viewModel.showSetting()
+            },
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Menu,
+                contentDescription = null
+            )
+        }
+    }
+}
+
+@Composable
+fun CameraActionFooter() {
     val scope = rememberCoroutineScope()
     val viewModel: CameraViewModel = koinViewModel()
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surface)
     ) {
-        Spacer(modifier = Modifier.statusBarsPadding())
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(Layout.padding.pxs)
-        ) {
-            IconButton(
-                modifier = Modifier.align(Alignment.CenterEnd),
-                onClick = {
+        Spacer(modifier = Modifier.height(Layout.padding.ps))
+        CameraPictureModeRow()
 
-                },
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Menu,
-                    contentDescription = null
-                )
-            }
-        }
-        CameraPreviewLayer(
-            foreground = {
-                CameraGridIndicator()
-                CameraCaptureInfoLayer()
-                CameraSeaLevelIndicator()
-            }
-        )
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1F)
         ) {
-            Spacer(modifier = Modifier.height(Layout.padding.ps))
-            CameraPictureModeRow()
-
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1F)
+                    .size(68.dp)
+                    .align(Alignment.Center)
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(68.dp)
-                        .align(Alignment.Center)
+                val borderPadding = 6.dp
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = viewModel.captureLoading.value,
+                    enter = fadeIn(),
+                    exit = fadeOut(),
                 ) {
-                    val borderPadding = 6.dp
-                    androidx.compose.animation.AnimatedVisibility(
-                        visible = viewModel.captureLoading.value,
-                        enter = fadeIn(),
-                        exit = fadeOut(),
-                    ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .align(Alignment.Center),
-                            strokeWidth = borderPadding,
-                            color = MaterialTheme.colorScheme.onBackground.copy(0.4F),
-                        )
-                    }
-                    androidx.compose.animation.AnimatedVisibility(
-                        visible = !viewModel.captureLoading.value,
-                        enter = fadeIn(),
-                        exit = fadeOut(),
-                    ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .align(Alignment.Center),
-                            strokeWidth = borderPadding,
-                            progress = 100F,
-                            color = MaterialTheme.colorScheme.onBackground.copy(0.4F),
-                        )
-                    }
-
-                    Box(
+                    CircularProgressIndicator(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(borderPadding)
-                            .clip(CircleShape)
-                            .background(color = MaterialTheme.colorScheme.onBackground)
-                            .clickable(
-                                enabled = !viewModel.captureLoading.value,
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = rememberRipple(color = MaterialTheme.colorScheme.primary)
-                            ) {
-                                scope.launch {
-                                    viewModel.captureLoading.value = true
-                                    try {
-                                        viewModel.capture()
-                                    } catch (e: Exception) {
-                                        e.printStackTrace()
-                                    } finally {
-                                        viewModel.captureLoading.value = false
-                                    }
-                                }
-                            }
+                            .align(Alignment.Center),
+                        strokeWidth = borderPadding,
+                        color = MaterialTheme.colorScheme.onBackground.copy(0.4F),
                     )
                 }
-            }
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = !viewModel.captureLoading.value,
+                    enter = fadeIn(),
+                    exit = fadeOut(),
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .align(Alignment.Center),
+                        strokeWidth = borderPadding,
+                        progress = 100F,
+                        color = MaterialTheme.colorScheme.onBackground.copy(0.4F),
+                    )
+                }
 
-            Spacer(modifier = Modifier.navigationBarsPadding())
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(borderPadding)
+                        .clip(CircleShape)
+                        .background(color = MaterialTheme.colorScheme.onBackground)
+                        .clickable(
+                            enabled = !viewModel.captureLoading.value,
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = rememberRipple(color = MaterialTheme.colorScheme.primary)
+                        ) {
+                            scope.launch {
+                                viewModel.captureLoading.value = true
+                                try {
+                                    viewModel.capture()
+                                } catch (e: Exception) {
+                                    e.printStackTrace()
+                                } finally {
+                                    viewModel.captureLoading.value = false
+                                }
+                            }
+                        }
+                )
+            }
         }
     }
 }
@@ -352,7 +581,7 @@ fun CameraCaptureInfoLayer() {
                             .clip(Layout.roundShape.rs)
                             .background(backgroundColor)
                             .clickable {
-
+                                viewModel.showSetting()
                             }
                             .padding(
                                 horizontal = Layout.padding.ps,

@@ -419,7 +419,7 @@ class CameraHolder(
         }
 
         // 开启预览
-        launch {
+        launch(Dispatchers.IO) {
             combine(
                 cameraDeviceFlow,
                 currentOutputItemFlow,
@@ -619,6 +619,7 @@ class CameraHolder(
     val cameraPairListFlow =
         MutableStateFlow(emptyList<Pair<String, CameraCharacteristics>>())
 
+    // TODO 不对外暴露
     val currentCameraPairFlow = MutableStateFlow<Pair<String, CameraCharacteristics>?>(null)
 
     val currentOutputItemFlow = MutableStateFlow<OutputItem?>(null)
