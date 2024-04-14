@@ -1,6 +1,32 @@
 plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
+    id("maven-publish")
+}
+
+val GROUP_NAME = "com.github.jvziyaoyao"
+val ARTIFACT_NAME = "camera-raw"
+val VERSION_CODE = 1
+val VERSION_NAME = "1.0.1-alpha.1"
+
+group = GROUP_NAME
+version = VERSION_NAME
+
+afterEvaluate {
+    publishing {
+        publications {
+            create<MavenPublication>("release") {
+                from(components["release"])
+                groupId = GROUP_NAME
+                artifactId = ARTIFACT_NAME
+                version = VERSION_NAME
+            }
+        }
+        repositories {
+            // 发布的时候需要去除
+            mavenLocal()
+        }
+    }
 }
 
 android {
@@ -29,6 +55,12 @@ android {
     }
     kotlinOptions {
         jvmTarget = "1.8"
+    }
+    publishing {
+        singleVariant("release") {
+            withSourcesJar()
+            withJavadocJar()
+        }
     }
 }
 

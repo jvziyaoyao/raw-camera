@@ -5,8 +5,10 @@ import android.graphics.Rect
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.params.StreamConfigurationMap
 import android.os.Build
+import android.util.Log
 import android.util.Range
 import android.util.Size
+import java.util.Arrays
 
 enum class OutputMode(
     val label: String,
@@ -118,6 +120,9 @@ val CameraCharacteristics.sceneModes: List<SceneMode>
             SceneMode.getByCode(m)?.let { add(it) }
         }
     }
+
+val CameraCharacteristics.availableFaceDetectMaxCount: Int?
+    get() = this[CameraCharacteristics.STATISTICS_INFO_MAX_FACE_COUNT]
 
 val CameraCharacteristics.availableFaceDetectModes: IntArray?
     get() = this[CameraCharacteristics.STATISTICS_INFO_AVAILABLE_FACE_DETECT_MODES]
