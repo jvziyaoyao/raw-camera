@@ -14,13 +14,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import java.io.File
 
-data class FocusRequestOrientation(
-    var pitch: Float,
-    var roll: Float,
-    var yaw: Float,
-    var timestamp: Long = System.currentTimeMillis(),
-)
-
 class CameraViewModel : ViewModel() {
 
     /**
@@ -142,20 +135,9 @@ class CameraViewModel : ViewModel() {
         )
     }
 
-    fun focusCancel() {
-        cameraHolder.focusCancel()
-        focusRequestOrientation.value = null
-    }
+    fun focusCancel() = cameraHolder.focusCancel()
 
-    fun focusRequest(rect: Rect) {
-        focusRequestOrientation.value = FocusRequestOrientation(
-            pitch = pitchFlow.value,
-            roll = rollFlow.value,
-            yaw = yawFlow.value,
-        )
-        focusPointRectFlow.value = rect
-        cameraHolder.focusRequest(rect)
-    }
+    fun focusRequest(rect: Rect) = cameraHolder.focusRequest(rect)
 
     fun resumeCamera() = cameraHolder.onResume()
 
@@ -169,9 +151,7 @@ class CameraViewModel : ViewModel() {
 
     val captureLoading = mutableStateOf(false)
 
-    val focusRequestOrientation = mutableStateOf<FocusRequestOrientation?>(null)
-
-    val focusPointRectFlow = MutableStateFlow<Rect?>(null)
+//    val focusRequestOrientation = mutableStateOf<FocusRequestOrientation?>(null)
 
     val saveImageOrientation = mutableStateOf(0)
 

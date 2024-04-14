@@ -1,18 +1,14 @@
 package com.jvziyaoyao.raw.camera.page.camera
 
-import android.hardware.camera2.params.Face
 import android.opengl.GLSurfaceView
 import android.os.Build
 import android.os.Bundle
-import android.util.Log
 import android.view.Surface
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.rememberTransition
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -35,7 +31,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -43,7 +38,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Menu
@@ -53,6 +47,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -61,46 +56,30 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.DrawStyle
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import com.jvziyaoyao.camera.raw.holder.camera.availableFaceDetectMaxCount
 import com.jvziyaoyao.camera.raw.holder.camera.cameraRequirePermissions
 import com.jvziyaoyao.camera.raw.holder.camera.defaultSensorAspectRatio
-import com.jvziyaoyao.camera.raw.holder.camera.faceDetectResult
-import com.jvziyaoyao.camera.raw.holder.camera.isFrontCamera
 import com.jvziyaoyao.camera.raw.holder.camera.sensorAspectRatio
-import com.jvziyaoyao.camera.raw.holder.camera.sensorDetectRect2ComposeRect
-import com.jvziyaoyao.camera.raw.holder.camera.sensorSize
 import com.jvziyaoyao.raw.camera.base.BaseActivity
 import com.jvziyaoyao.raw.camera.base.CommonPermissions
 import com.jvziyaoyao.raw.camera.base.DynamicStatusBarColor
 import com.jvziyaoyao.raw.camera.base.animateRotationAsState
 import com.jvziyaoyao.raw.camera.ui.theme.Layout
-import com.jvziyaoyao.raw.camera.ui.theme.density
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.androidx.viewmodel.ext.android.viewModel
@@ -170,6 +149,7 @@ fun CameraBody() {
         CameraPreviewLayer(
             foreground = {
                 if (viewModel.gridEnable.value) CameraGridIndicator()
+                CameraFocusLayer()
                 CameraFaceDetectLayer()
                 CameraCaptureInfoLayer()
                 if (viewModel.levelIndicatorEnable.value) CameraSeaLevelIndicator()
@@ -260,69 +240,82 @@ fun CameraActionFooter() {
                     )
                 }
             }
-            Box(
-                modifier = Modifier
-                    .size(68.dp)
-            ) {
-                val borderPadding = 6.dp
-                androidx.compose.animation.AnimatedVisibility(
-                    visible = viewModel.captureLoading.value,
-                    enter = fadeIn(),
-                    exit = fadeOut(),
-                ) {
-                    CircularProgressIndicator(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .align(Alignment.Center),
-                        strokeWidth = borderPadding,
-                        color = MaterialTheme.colorScheme.onBackground.copy(0.4F),
-                    )
-                }
-                androidx.compose.animation.AnimatedVisibility(
-                    visible = !viewModel.captureLoading.value,
-                    enter = fadeIn(),
-                    exit = fadeOut(),
-                ) {
-                    CircularProgressIndicator(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .align(Alignment.Center),
-                        strokeWidth = borderPadding,
-                        progress = 100F,
-                        color = MaterialTheme.colorScheme.onBackground.copy(0.4F),
-                    )
-                }
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(borderPadding)
-                        .clip(CircleShape)
-                        .background(color = MaterialTheme.colorScheme.onBackground)
-                        .clickable(
-                            enabled = !viewModel.captureLoading.value,
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = rememberRipple(color = MaterialTheme.colorScheme.primary)
-                        ) {
-                            scope.launch {
-                                viewModel.captureLoading.value = true
-                                try {
-                                    viewModel.capture()
-                                } catch (e: Exception) {
-                                    e.printStackTrace()
-                                } finally {
-                                    viewModel.captureLoading.value = false
-                                }
-                            }
+            CameraCaptureButton(
+                loading = viewModel.captureLoading.value,
+                onClick = {
+                    scope.launch {
+                        viewModel.captureLoading.value = true
+                        try {
+                            viewModel.capture()
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        } finally {
+                            viewModel.captureLoading.value = false
                         }
-                )
-            }
+                    }
+                }
+            )
             SideCircleWrap(
                 onClick = {
 
                 }
             ) {}
         }
+    }
+}
+
+@Composable
+fun CameraCaptureButton(
+    loading: Boolean,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .size(68.dp)
+    ) {
+        val borderPadding = 6.dp
+        AnimatedVisibility(
+            visible = loading,
+            enter = fadeIn(),
+            exit = fadeOut(),
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .align(Alignment.Center),
+                strokeWidth = borderPadding,
+                color = MaterialTheme.colorScheme.onBackground.copy(0.4F),
+            )
+        }
+        AnimatedVisibility(
+            visible = !loading,
+            enter = fadeIn(),
+            exit = fadeOut(),
+        ) {
+            CircularProgressIndicator(
+                progress = { 100F },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .align(Alignment.Center),
+                color = MaterialTheme.colorScheme.onBackground.copy(0.4F),
+                strokeWidth = borderPadding,
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(borderPadding)
+                .clip(CircleShape)
+                .background(color = MaterialTheme.colorScheme.onBackground)
+                .clickable(
+                    enabled = !loading,
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = rememberRipple(color = MaterialTheme.colorScheme.primary)
+                ) {
+                    onClick()
+                }
+        )
     }
 }
 
@@ -419,161 +412,6 @@ fun CameraPreviewLayer(
 }
 
 @Composable
-fun CornerContent(
-    modifier: Modifier = Modifier,
-) {
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .drawWithContent {
-                val color = Color.Cyan
-                val strokeWidth = size.width.div(10)
-                drawArc(
-                    color = color,
-                    startAngle = 0F,
-                    sweepAngle = 90F,
-                    size = Size(size.width - strokeWidth, height = size.height - strokeWidth),
-                    topLeft = Offset(strokeWidth.div(2), strokeWidth.div(2)),
-                    useCenter = false,
-                    style = Stroke(width = strokeWidth)
-                )
-                drawLine(
-                    color = color,
-                    start = Offset(size.width - strokeWidth.div(2), 0F),
-                    end = Offset(size.width - strokeWidth.div(2), size.height.div(2)),
-                    strokeWidth = strokeWidth,
-                )
-                drawLine(
-                    color = color,
-                    start = Offset(0F, size.height - strokeWidth.div(2)),
-                    end = Offset(size.width.div(2), size.height - strokeWidth.div(2)),
-                    strokeWidth = strokeWidth,
-                )
-            }
-    )
-}
-
-@Composable
-fun DetectRectContent(modifier: Modifier = Modifier) {
-    BoxWithConstraints(
-        modifier = modifier.fillMaxSize(),
-    ) {
-        var cornerSize = maxWidth.div(3)
-        if (cornerSize > 20.dp) cornerSize = 20.dp
-        CornerContent(
-            modifier = Modifier
-                .size(cornerSize)
-                .align(Alignment.BottomEnd)
-        )
-        CornerContent(
-            modifier = Modifier
-                .size(cornerSize)
-                .rotate(-90F)
-                .align(Alignment.TopEnd)
-        )
-        CornerContent(
-            modifier = Modifier
-                .size(cornerSize)
-                .rotate(-180F)
-                .align(Alignment.TopStart)
-        )
-        CornerContent(
-            modifier = Modifier
-                .size(cornerSize)
-                .rotate(90F)
-                .align(Alignment.BottomStart)
-        )
-    }
-}
-
-@Composable
-fun CameraFaceDetectLayer() {
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val density = LocalDensity.current
-        val viewModel: CameraViewModel = koinViewModel()
-        val currentCameraPair = viewModel.currentCameraPairFlow.collectAsState()
-        val cameraCharacteristics = currentCameraPair.value?.second
-        val captureResult = viewModel.captureResultFlow.collectAsState()
-
-        val faceMaxCount = cameraCharacteristics?.availableFaceDetectMaxCount ?: 0
-        val faceList = remember(faceMaxCount) { Array<Face?>(faceMaxCount) { null } }
-        LaunchedEffect(captureResult.value) {
-            captureResult.value?.faceDetectResult?.let { currentList ->
-                for (i in faceList.indices) {
-                    if (i > currentList.lastIndex) {
-                        faceList[i] = null
-                    } else {
-                        faceList[i] = currentList[i]
-                    }
-                }
-            }
-        }
-
-        density.run {
-            val size = Size(maxWidth.toPx(), maxHeight.toPx())
-            cameraCharacteristics?.apply {
-                if (sensorSize != null) {
-                    val sensorWidth = sensorSize!!.width()
-                    val sensorHeight = sensorSize!!.height()
-                    faceList.forEach { face ->
-                        val faceRect = remember { mutableStateOf<Rect?>(null) }
-                        if (face != null) {
-                            faceRect.value = sensorDetectRect2ComposeRect(
-                                rect = face.bounds,
-                                rotationOrientation = viewModel.rotationOrientation.value,
-                                flipHorizontal = isFrontCamera,
-                                size = size,
-                                sensorWidth = sensorWidth,
-                                sensorHeight = sensorHeight,
-                            )
-                        }
-
-                        faceRect.value?.let {
-                            val animationSpec = spring<Float>()
-                            val offsetXAnimation =
-                                animateFloatAsState(
-                                    targetValue = it.left,
-                                    animationSpec = animationSpec,
-                                )
-                            val offsetYAnimation =
-                                animateFloatAsState(
-                                    targetValue = it.top,
-                                    animationSpec = animationSpec,
-                                )
-                            val widthAnimation =
-                                animateFloatAsState(
-                                    targetValue = it.width,
-                                    animationSpec = animationSpec,
-                                )
-                            val heightAnimation =
-                                animateFloatAsState(
-                                    targetValue = it.height,
-                                    animationSpec = animationSpec,
-                                )
-                            val alphaAnimation =
-                                animateFloatAsState(targetValue = if (face == null) 0F else 1F)
-
-                            DetectRectContent(
-                                modifier = Modifier
-                                    .graphicsLayer {
-                                        alpha = alphaAnimation.value
-                                        translationX = offsetXAnimation.value
-                                        translationY = offsetYAnimation.value
-                                    }
-                                    .size(
-                                        width = widthAnimation.value.toDp(),
-                                        height = heightAnimation.value.toDp(),
-                                    )
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
 fun CameraCaptureInfoLayer() {
     val viewModel: CameraViewModel = koinViewModel()
     val currentOutputItem = viewModel.currentOutputItemFlow.collectAsState()
@@ -608,7 +446,7 @@ fun CameraCaptureInfoLayer() {
                             Text(
                                 text = outputMode.label,
                                 color = LocalContentColor.current,
-                                fontSize = Layout.fontSize.fs
+                                fontSize = Layout.fontSize.fs,
                             )
                             Spacer(modifier = Modifier.width(Layout.padding.pxxs))
                             Icon(

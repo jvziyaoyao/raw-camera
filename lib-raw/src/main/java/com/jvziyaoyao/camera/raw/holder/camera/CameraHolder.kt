@@ -377,7 +377,7 @@ class CameraHolder(
         cameraPairListFlow.value = context.fetchCameraPairList()
 
         // 初始化选择摄像头
-        launch {
+        launch(Dispatchers.IO) {
             combine(cameraPairListFlow, currentCameraPairFlow) { t1, t2 ->
                 Pair(t1, t2)
             }.collectLatest { t ->
@@ -390,7 +390,7 @@ class CameraHolder(
         }
 
         // 开启当前摄像头
-        launch {
+        launch(Dispatchers.IO) {
             combine(
                 currentCameraPairFlow,
                 resumeTimestampFlow,
@@ -447,7 +447,7 @@ class CameraHolder(
         }
 
         // 变更预览参数
-        launch {
+        launch(Dispatchers.IO) {
             combine(
                 cameraCaptureSessionFlow,
                 cameraDeviceFlow,
@@ -480,7 +480,7 @@ class CameraHolder(
         }
 
         // 计算帧率
-        launch {
+        launch(Dispatchers.IO) {
             var job: Job? = null
             resumeTimestampFlow.collectLatest {
                 launch {
