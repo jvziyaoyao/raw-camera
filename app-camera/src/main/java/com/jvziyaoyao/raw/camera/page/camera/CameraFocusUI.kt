@@ -1,23 +1,27 @@
 package com.jvziyaoyao.raw.camera.page.camera
 
-import android.annotation.SuppressLint
 import android.hardware.camera2.CameraMetadata
-import android.webkit.WebStorage.Origin
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateCentroid
+import androidx.compose.foundation.gestures.calculateCentroidSize
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateRotation
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -27,25 +31,38 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEvent
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.util.fastAny
 import com.jvziyaoyao.camera.raw.holder.camera.aeState
 import com.jvziyaoyao.camera.raw.holder.camera.afState
 import com.jvziyaoyao.camera.raw.holder.camera.getFingerPointRect
 import com.jvziyaoyao.camera.raw.holder.camera.rectFromNormalized
 import com.jvziyaoyao.camera.raw.holder.camera.rectNormalized
-import kotlinx.coroutines.android.awaitFrame
+import com.jvziyaoyao.camera.raw.holder.camera.zoomRatioRange
+import com.jvziyaoyao.raw.camera.ui.theme.Layout
+import com.jvziyaoyao.raw.camera.util.formatToDecimalPlaces
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
+import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.absoluteValue
 
 @Composable
@@ -141,6 +158,9 @@ fun CameraFocusLayer() {
         val aeLockedState = remember { mutableStateOf(false) }
         val focusRequestOrientation = remember { mutableStateOf<FocusRequestOrientation?>(null) }
         val captureResult = viewModel.captureResultFlow.collectAsState()
+        val characteristics =
+            viewModel.currentCameraCharacteristicsFlow.collectAsState(initial = null)
+        val zoomRatio = viewModel.captureController.zoomRatioFlow.collectAsState()
         LaunchedEffect(captureResult.value) {
             afLockedState.value =
                 captureResult.value?.afState == CameraMetadata.CONTROL_AF_STATE_FOCUSED_LOCKED
@@ -176,32 +196,46 @@ fun CameraFocusLayer() {
             modifier = Modifier
                 .fillMaxSize()
                 .pointerInput(Unit) {
-                    detectTapGestures {
-                        val fingerSize = maxWidthPx
-                            .div(5.4F)
-                        val rect = getFingerPointRect(
-                            it.x,
-                            it.y,
-                            maxWidthPx,
-                            maxHeightPx,
-                            fingerSize
-                        )
-                        fingerClick.value = it
-                        fingerRect.value = rect
-                        focusPointRect.value = rectNormalized(rect, maxWidthPx, maxHeightPx)
-                        afLockedState.value = false
-                        aeLockedState.value = false
-                        focusRequestOrientation.value = FocusRequestOrientation(
-                            pitch = viewModel.pitchFlow.value,
-                            roll = viewModel.rollFlow.value,
-                            yaw = viewModel.yawFlow.value,
-                        )
-                        viewModel.focusRequest(focusPointRect.value)
-                        scope.launch {
-                            focusScale.snapTo(2F)
-                            focusScale.animateTo(1F)
+                    detectTransformGestures(
+                        onTap = {
+                            val fingerSize = maxWidthPx
+                                .div(5.4F)
+                            val rect = getFingerPointRect(
+                                it.x,
+                                it.y,
+                                maxWidthPx,
+                                maxHeightPx,
+                                fingerSize
+                            )
+                            fingerClick.value = it
+                            fingerRect.value = rect
+                            focusPointRect.value = rectNormalized(rect, maxWidthPx, maxHeightPx)
+                            afLockedState.value = false
+                            aeLockedState.value = false
+                            focusRequestOrientation.value = FocusRequestOrientation(
+                                pitch = viewModel.pitchFlow.value,
+                                roll = viewModel.rollFlow.value,
+                                yaw = viewModel.yawFlow.value,
+                            )
+                            viewModel.focusRequest(focusPointRect.value)
+                            scope.launch {
+                                focusScale.snapTo(2F)
+                                focusScale.animateTo(1F)
+                            }
+                        },
+                        onGesture = { _, _, zoom, _, _ ->
+                            characteristics.value?.zoomRatioRange?.let { zoomRatioRange ->
+                                val currentZoomRatio = zoomRatio.value
+                                var nextZoomRatio = currentZoomRatio * zoom
+                                if (nextZoomRatio > zoomRatioRange.upper) nextZoomRatio =
+                                    zoomRatioRange.upper
+                                if (nextZoomRatio < zoomRatioRange.lower) nextZoomRatio =
+                                    zoomRatioRange.lower
+                                viewModel.captureController.zoomRatioFlow.value = nextZoomRatio
+                            }
+                            true
                         }
-                    }
+                    )
                 }
         ) {
             val wrapAlpha =
@@ -254,6 +288,120 @@ fun CameraFocusLayer() {
                     contentDescription = null
                 )
             }
+
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = Layout.padding.pl)
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.onBackground.copy(0.4F))
+            ) {
+                Text(
+                    modifier = Modifier.align(Alignment.Center),
+                    text = "${zoomRatio.value.formatToDecimalPlaces(1)}X",
+                    fontSize = Layout.fontSize.fxs,
+                    color = MaterialTheme.colorScheme.background.copy(0.6F),
+                )
+            }
         }
+    }
+}
+
+suspend fun PointerInputScope.detectTransformGestures(
+    panZoomLock: Boolean = false,
+    gestureStart: () -> Unit = {},
+    gestureEnd: (Boolean) -> Unit = {},
+    onTap: (Offset) -> Unit = {},
+    onDoubleTap: (Offset) -> Unit = {},
+    onGesture: (centroid: Offset, pan: Offset, zoom: Float, rotation: Float, event: PointerEvent) -> Boolean,
+) {
+    var lastReleaseTime = 0L
+    var scope: CoroutineScope? = null
+    awaitEachGesture {
+        var rotation = 0f
+        var zoom = 1f
+        var pan = Offset.Zero
+        var pastTouchSlop = false
+        val touchSlop = viewConfiguration.touchSlop
+        var lockedToPanZoom = false
+
+        awaitFirstDown(requireUnconsumed = false)
+        val t0 = System.currentTimeMillis()
+        var releasedEvent: PointerEvent? = null
+        var moveCount = 0
+        // 这里开始事件
+        gestureStart()
+        do {
+            val event = awaitPointerEvent()
+            if (event.type == PointerEventType.Release) releasedEvent = event
+            if (event.type == PointerEventType.Move) moveCount++
+            val canceled = event.changes.fastAny { it.isConsumed }
+            if (!canceled) {
+                val zoomChange = event.calculateZoom()
+                val rotationChange = event.calculateRotation()
+                val panChange = event.calculatePan()
+
+                if (!pastTouchSlop) {
+                    zoom *= zoomChange
+                    rotation += rotationChange
+                    pan += panChange
+
+                    val centroidSize = event.calculateCentroidSize(useCurrent = false)
+                    val zoomMotion = abs(1 - zoom) * centroidSize
+                    val rotationMotion = abs(rotation * PI.toFloat() * centroidSize / 180f)
+                    val panMotion = pan.getDistance()
+
+                    if (zoomMotion > touchSlop ||
+                        rotationMotion > touchSlop ||
+                        panMotion > touchSlop
+                    ) {
+                        pastTouchSlop = true
+                        lockedToPanZoom = panZoomLock && rotationMotion < touchSlop
+                    }
+                }
+                if (pastTouchSlop) {
+                    val centroid = event.calculateCentroid(useCurrent = false)
+                    val effectiveRotation = if (lockedToPanZoom) 0f else rotationChange
+                    if (effectiveRotation != 0f ||
+                        zoomChange != 1f ||
+                        panChange != Offset.Zero
+                    ) {
+                        if (!onGesture(
+                                centroid,
+                                panChange,
+                                zoomChange,
+                                effectiveRotation,
+                                event
+                            )
+                        ) break
+                    }
+                }
+            }
+        } while (!canceled && event.changes.fastAny { it.pressed })
+
+        var t1 = System.currentTimeMillis()
+        val dt = t1 - t0
+        val dlt = t1 - lastReleaseTime
+
+        if (moveCount == 0) releasedEvent?.let { e ->
+            if (e.changes.isEmpty()) return@let
+            val offset = e.changes.first().position
+            if (dlt < 272) {
+                t1 = 0L
+                scope?.cancel()
+                onDoubleTap(offset)
+            } else if (dt < 200) {
+                scope = MainScope()
+                scope?.launch(Dispatchers.Main) {
+                    delay(272)
+                    onTap(offset)
+                }
+            }
+            lastReleaseTime = t1
+        }
+
+        // 这里是事件结束
+        gestureEnd(moveCount != 0)
     }
 }
