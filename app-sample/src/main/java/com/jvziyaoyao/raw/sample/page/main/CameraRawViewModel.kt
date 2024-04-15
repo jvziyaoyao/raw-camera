@@ -5,9 +5,12 @@ import android.os.Environment
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.geometry.Rect
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.jvziyaoyao.camera.raw.holder.camera.CameraHolder
 import com.jvziyaoyao.camera.raw.holder.sensor.SensorHolder
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import java.io.File
 
 enum class CaptureMode() {
@@ -176,8 +179,21 @@ class CameraRawViewModel : ViewModel() {
         )
     }
 
+    val focusRequestTriggerFlow
+        get() = captureController.focusRequestTriggerFlow
+
     fun focusCancel() {
         cameraHolder.focusCancel()
+        viewModelScope.launch {
+            delay(2000L)
+            if (focusRequestTriggerFlow.value?.focusCancel == true) {
+                focusIdle()
+            }
+        }
+    }
+
+    fun focusIdle() {
+        cameraHolder.focusIdle()
         focusRequestOrientation.value = null
     }
 

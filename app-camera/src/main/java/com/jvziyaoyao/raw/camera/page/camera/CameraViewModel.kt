@@ -10,7 +10,6 @@ import com.jvziyaoyao.camera.raw.holder.camera.CameraHolder
 import com.jvziyaoyao.camera.raw.holder.camera.chooseDefaultCameraPair
 import com.jvziyaoyao.camera.raw.holder.camera.isFrontCamera
 import com.jvziyaoyao.camera.raw.holder.sensor.SensorHolder
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import java.io.File
 
@@ -101,6 +100,9 @@ class CameraViewModel : ViewModel() {
     val rotationOrientation
         get() = cameraHolder.rotationOrientation
 
+    val focusRequestTriggerFlow
+        get() = captureController.focusRequestTriggerFlow
+
     private fun getStoragePath(): File {
         val picturesFile =
             Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES).absoluteFile
@@ -136,6 +138,8 @@ class CameraViewModel : ViewModel() {
     }
 
     fun focusCancel() = cameraHolder.focusCancel()
+
+    fun focusIdle() = cameraHolder.focusIdle()
 
     fun focusRequest(rect: Rect) = cameraHolder.focusRequest(rect)
 

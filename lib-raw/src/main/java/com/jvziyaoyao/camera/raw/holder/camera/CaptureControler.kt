@@ -17,6 +17,7 @@ data class FocusRequestTrigger(
     var focusRect: Rect?,
     var focusRequest: Boolean,
     var focusCancel: Boolean,
+    var focusIdle: Boolean,
 )
 
 fun calcTemperature(factor: Int): RggbChannelVector {
@@ -48,7 +49,7 @@ class CaptureController {
 
     val currentFaceDetectModeFlow = MutableStateFlow<FaceDetectMode?>(null)
 
-    private val focusRequestTriggerFlow = MutableStateFlow<FocusRequestTrigger?>(null)
+    val focusRequestTriggerFlow = MutableStateFlow<FocusRequestTrigger?>(null)
 
     val manualSensorParamsFlow = combine(
         listOf(
@@ -201,6 +202,18 @@ class CaptureController {
                 if (focusCancel) {
                     set(
                         CaptureRequest.CONTROL_AF_TRIGGER,
+                        CameraMetadata.CONTROL_AF_TRIGGER_CANCEL
+                    )
+                    set(CaptureRequest.CONTROL_AF_REGIONS, null)
+                    set(
+                        CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER,
+                        CameraMetadata.CONTROL_AE_PRECAPTURE_TRIGGER_CANCEL
+                    )
+                    set(CaptureRequest.CONTROL_AE_REGIONS, null)
+                }
+                if (focusIdle) {
+                    set(
+                        CaptureRequest.CONTROL_AF_TRIGGER,
                         CameraMetadata.CONTROL_AF_TRIGGER_IDLE
                     )
                     set(CaptureRequest.CONTROL_AF_REGIONS, null)
@@ -218,7 +231,8 @@ class CaptureController {
         focusRequestTriggerFlow.value = FocusRequestTrigger(
             focusRect = rect,
             focusRequest = true,
-            focusCancel = false
+            focusCancel = false,
+            focusIdle = false,
         )
     }
 
@@ -227,6 +241,16 @@ class CaptureController {
             focusRect = null,
             focusRequest = false,
             focusCancel = true,
+            focusIdle = false,
+        )
+    }
+
+    fun focusIdle() {
+        focusRequestTriggerFlow.value = FocusRequestTrigger(
+            focusRect = null,
+            focusRequest = false,
+            focusCancel = false,
+            focusIdle = true,
         )
     }
 

@@ -161,6 +161,7 @@ fun CameraFocusLayer() {
         val characteristics =
             viewModel.currentCameraCharacteristicsFlow.collectAsState(initial = null)
         val zoomRatio = viewModel.captureController.zoomRatioFlow.collectAsState()
+        val focusRequestTrigger = viewModel.focusRequestTriggerFlow.collectAsState()
         LaunchedEffect(captureResult.value) {
             afLockedState.value =
                 captureResult.value?.afState == CameraMetadata.CONTROL_AF_STATE_FOCUSED_LOCKED
@@ -171,6 +172,15 @@ fun CameraFocusLayer() {
         val currentPitch = viewModel.pitchFlow.collectAsState()
         val currentRoll = viewModel.rollFlow.collectAsState()
         val currentYaw = viewModel.yawFlow.collectAsState()
+        fun cancelFocus() {
+            scope.launch {
+                viewModel.focusCancel()
+                delay(2000L)
+                if (focusRequestTrigger.value?.focusCancel == true) {
+                    viewModel.focusIdle()
+                }
+            }
+        }
         LaunchedEffect(
             currentPitch.value,
             currentRoll.value,
@@ -185,9 +195,10 @@ fun CameraFocusLayer() {
                     && ((currentPitch.value - pitch).absoluteValue > delta
                             || (currentRoll.value - roll).absoluteValue > delta
                             || (currentYaw.value - yaw).absoluteValue > delta)
+                    && focusRequestTrigger.value?.focusCancel != true
+                    && focusRequestTrigger.value?.focusIdle != true
                 ) {
-                    viewModel.focusCancel()
-                    focusRequestOrientation.value = null
+                    cancelFocus()
                 }
             }
         }
@@ -239,7 +250,12 @@ fun CameraFocusLayer() {
                 }
         ) {
             val wrapAlpha =
-                animateFloatAsState(targetValue = if (focusRequestOrientation.value != null) 1F else 0F)
+                animateFloatAsState(
+                    targetValue =
+                    if (focusRequestTrigger.value?.focusCancel == true) 0.5F
+                    else if (focusRequestTrigger.value?.focusIdle != true) 1F
+                    else 0F
+                )
             Box(
                 modifier = Modifier
                     .fillMaxSize()

@@ -6,9 +6,6 @@
         <State />
       </entry>
       <entry key="app-camera">
-        <State />
-      </entry>
-      <entry key="app-sample">
         <State>
           <runningDeviceTargetSelectedWithDropDown>
             <Target>
@@ -16,13 +13,16 @@
               <deviceKey>
                 <Key>
                   <type value="SERIAL_NUMBER" />
-                  <value value="192.168.0.102:5555" />
+                  <value value="192.168.0.71:5555" />
                 </Key>
               </deviceKey>
             </Target>
           </runningDeviceTargetSelectedWithDropDown>
-          <timeTargetWasSelectedWithDropDown value="2024-04-13T14:54:32.771937Z" />
+          <timeTargetWasSelectedWithDropDown value="2024-04-15T02:49:15.650170Z" />
         </State>
+      </entry>
+      <entry key="app-sample">
+        <State />
       </entry>
       <entry key="sample">
         <State />

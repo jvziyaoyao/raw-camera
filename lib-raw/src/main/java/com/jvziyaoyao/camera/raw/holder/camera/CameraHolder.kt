@@ -702,7 +702,10 @@ class CameraHolder(
 
     fun focusCancel() {
         captureController.focusCancel()
-        Log.i(TAG, "focusCancel: 取消对焦～")
+    }
+
+    fun focusIdle() {
+        captureController.focusIdle()
     }
 
 }

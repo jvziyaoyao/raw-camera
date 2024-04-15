@@ -166,6 +166,7 @@ class CameraRawActivity : ComponentActivity(), CoroutineScope by MainScope() {
                 val currentRoll = mViewModel.rollFlow.value
                 val currentYaw = mViewModel.yawFlow.value
                 val srcOrientation = mViewModel.focusRequestOrientation.value
+                val focusRequestTrigger = mViewModel.focusRequestTriggerFlow.value
                 srcOrientation?.apply {
                     val delta = 10F
                     val delay = 1000 * 2 // 两秒内不要取消
@@ -174,6 +175,8 @@ class CameraRawActivity : ComponentActivity(), CoroutineScope by MainScope() {
                         && ((currentPitch - pitch).absoluteValue > delta
                                 || (currentRoll - roll).absoluteValue > delta
                                 || (currentYaw - yaw).absoluteValue > delta)
+                        && focusRequestTrigger?.focusCancel != true
+                        && focusRequestTrigger?.focusIdle != true
                     ) {
                         mViewModel.focusCancel()
                     }
@@ -185,8 +188,12 @@ class CameraRawActivity : ComponentActivity(), CoroutineScope by MainScope() {
             mViewModel.currentCameraPairFlow.collectLatest {
                 it?.first?.let { cameraId ->
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                        val extCharacteristics = cameraManager.getCameraExtensionCharacteristics(cameraId)
-                        Log.i("TAG", "onCreate: extCharacteristics $extCharacteristics ~ ${extCharacteristics.supportedExtensions}")
+                        val extCharacteristics =
+                            cameraManager.getCameraExtensionCharacteristics(cameraId)
+                        Log.i(
+                            "TAG",
+                            "onCreate: extCharacteristics $extCharacteristics ~ ${extCharacteristics.supportedExtensions}"
+                        )
                     }
                 }
             }
@@ -302,6 +309,7 @@ fun CameraRawPreviewLayer(
                     }
             ) {
                 if (cameraCharacteristics != null) {
+                    val focusRequestTrigger = viewModel.focusRequestTriggerFlow.collectAsState()
                     val focusPointRect = viewModel.focusPointRectFlow.collectAsState()
                     val captureResult = viewModel.captureResultFlow.collectAsState()
                     val sensorSize = cameraCharacteristics.sensorSize
@@ -312,8 +320,14 @@ fun CameraRawPreviewLayer(
                             focusPointRect.value?.let { fPointRect ->
                                 val pointRect =
                                     rectFromNormalized(fPointRect, size.width, size.height)
+                                val color =
+                                    if (focusRequestTrigger.value?.focusCancel == true) {
+                                        Color.White
+                                    } else if (focusRequestTrigger.value?.focusIdle == true) {
+                                        Color.Transparent
+                                    } else Color.Cyan
                                 drawRect(
-                                    color = Color.White,
+                                    color = color,
                                     topLeft = pointRect.topLeft,
                                     size = pointRect.size,
                                     style = Stroke(width = 10F)
