@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlin.math.acos
 import kotlin.math.sqrt
 
-class SensorHolder {
+class SensorFlow {
 
     private var sensorManager: SensorManager
     private var accelerometer: Sensor? = null

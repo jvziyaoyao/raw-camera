@@ -1,28 +1,28 @@
 package com.jvziyaoyao.raw.sample.page.sensor
 
 import androidx.lifecycle.ViewModel
-import com.jvziyaoyao.camera.raw.holder.sensor.SensorHolder
+import com.jvziyaoyao.camera.raw.holder.sensor.SensorFlow
 
 class SensorViewModel : ViewModel() {
 
-    private lateinit var sensorHolder: SensorHolder
+    private lateinit var sensorFlow: SensorFlow
 
     val gravityFlow
-        get() = sensorHolder.gravityFlow
+        get() = sensorFlow.gravityFlow
 
     val pitchFlow
-        get() = sensorHolder.pitchFlow
+        get() = sensorFlow.pitchFlow
     val rollFlow
-        get() = sensorHolder.rollFlow
+        get() = sensorFlow.rollFlow
     val yawFlow
-        get() = sensorHolder.yawFlow
+        get() = sensorFlow.yawFlow
 
     fun setupSensor() {
-        sensorHolder = SensorHolder()
+        sensorFlow = SensorFlow()
     }
 
-    fun startSensor() = sensorHolder.start()
+    fun startSensor() = sensorFlow.start()
 
-    fun stopSensor() = sensorHolder.stop()
+    fun stopSensor() = sensorFlow.stop()
 
 }

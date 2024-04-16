@@ -3,7 +3,6 @@ package com.jvziyaoyao.camera.raw.holder.camera
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
-import android.graphics.Bitmap
 import android.graphics.ImageFormat
 import android.hardware.camera2.CameraCaptureSession
 import android.hardware.camera2.CameraCharacteristics
@@ -24,8 +23,6 @@ import android.view.Surface
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.geometry.Rect
 import androidx.exifinterface.media.ExifInterface
-import com.jvziyaoyao.camera.raw.holder.camera.off.OffScreenEGLSurface
-import com.jvziyaoyao.camera.raw.holder.camera.off.OffScreenRender
 import com.jvziyaoyao.camera.raw.util.ContextUtil
 import com.jvziyaoyao.camera.raw.util.testTime
 import kotlinx.coroutines.CoroutineScope
@@ -90,12 +87,12 @@ val cameraRequirePermissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.
     )
 }
 
-class CameraHolder(
+class CameraFlow(
     val displayRotation: Int = 0,
     val provideSaveFile: ProvideSaveFile = defaultProvideSaveFile,
 ) : CoroutineScope by MainScope() {
 
-    private val TAG = CameraHolder::class.java.name
+    private val TAG = CameraFlow::class.java.name
 
     private val context = ContextUtil.getApplicationByReflect()
 

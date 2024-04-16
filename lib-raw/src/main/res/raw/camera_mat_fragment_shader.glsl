@@ -1,6 +1,4 @@
 #version 300 es
-//OpenGL ES3.0外部纹理扩展
-//#extension GL_OES_EGL_image_external_essl3 : require
 precision mediump float;
 uniform sampler2D yTexture;
 uniform sampler2D uTexture;

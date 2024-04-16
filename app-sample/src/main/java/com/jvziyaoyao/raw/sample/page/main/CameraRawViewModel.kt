@@ -9,9 +9,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.geometry.Rect
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.jvziyaoyao.camera.raw.holder.camera.CameraHolder
+import com.jvziyaoyao.camera.raw.holder.camera.CameraFlow
 import com.jvziyaoyao.camera.raw.holder.camera.off.getGLFilterBitmapAsync
-import com.jvziyaoyao.camera.raw.holder.sensor.SensorHolder
+import com.jvziyaoyao.camera.raw.holder.sensor.SensorFlow
 import com.jvziyaoyao.raw.sample.R
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -75,25 +75,25 @@ class CameraRawViewModel : ViewModel() {
      *
      */
 
-    private lateinit var sensorHolder: SensorHolder
+    private lateinit var sensorFlow: SensorFlow
 
     val gravityFlow
-        get() = sensorHolder.gravityFlow
+        get() = sensorFlow.gravityFlow
 
     val pitchFlow
-        get() = sensorHolder.pitchFlow
+        get() = sensorFlow.pitchFlow
     val rollFlow
-        get() = sensorHolder.rollFlow
+        get() = sensorFlow.rollFlow
     val yawFlow
-        get() = sensorHolder.yawFlow
+        get() = sensorFlow.yawFlow
 
     fun setupSensor() {
-        sensorHolder = SensorHolder()
+        sensorFlow = SensorFlow()
     }
 
-    fun startSensor() = sensorHolder.start()
+    fun startSensor() = sensorFlow.start()
 
-    fun stopSensor() = sensorHolder.stop()
+    fun stopSensor() = sensorFlow.stop()
 
     /**
      *
@@ -101,54 +101,54 @@ class CameraRawViewModel : ViewModel() {
      *
      */
 
-    private lateinit var cameraHolder: CameraHolder
+    private lateinit var cameraFlow: CameraFlow
 
     val currentCameraPairFlow
-        get() = cameraHolder.currentCameraPairFlow
+        get() = cameraFlow.currentCameraPairFlow
 
     val cameraPairListFlow
-        get() = cameraHolder.cameraPairListFlow
+        get() = cameraFlow.cameraPairListFlow
 
     val currentOutputItemFlow
-        get() = cameraHolder.currentOutputItemFlow
+        get() = cameraFlow.currentOutputItemFlow
 
     // 拍摄控制
 
     val captureController
-        get() = cameraHolder.captureController
+        get() = cameraFlow.captureController
 
     val captureResultFlow
-        get() = cameraHolder.captureResultFlow
+        get() = cameraFlow.captureResultFlow
 
     // 画面渲染
 
     val exposureHistogramDataFlow
-        get() = cameraHolder.exposureHistogramDataFlow
+        get() = cameraFlow.exposureHistogramDataFlow
 
     val focusPeakingEnableFlow
-        get() = cameraHolder.focusPeakingEnableFlow
+        get() = cameraFlow.focusPeakingEnableFlow
 
     val brightnessPeakingEnableFlow
-        get() = cameraHolder.brightnessPeakingEnableFlow
+        get() = cameraFlow.brightnessPeakingEnableFlow
 
     val exposureHistogramEnableFlow
-        get() = cameraHolder.exposureHistogramEnableFlow
+        get() = cameraFlow.exposureHistogramEnableFlow
 
     // 性能相关
 
     val captureFrameRate
-        get() = cameraHolder.captureFrameRate
+        get() = cameraFlow.captureFrameRate
 
     val rendererFrameRate
-        get() = cameraHolder.rendererFrameRate
+        get() = cameraFlow.rendererFrameRate
 
     // 屏幕旋转
 
     val displayRotation
-        get() = cameraHolder.displayRotation
+        get() = cameraFlow.displayRotation
 
     val rotationOrientation
-        get() = cameraHolder.rotationOrientation
+        get() = cameraFlow.rotationOrientation
 
     private fun getStoragePath(): File {
         val picturesFile =
@@ -158,27 +158,27 @@ class CameraRawViewModel : ViewModel() {
         return storageFile
     }
 
-    fun onPermissionChanged(allGranted: Boolean) = cameraHolder.onPermissionChanged(allGranted)
+    fun onPermissionChanged(allGranted: Boolean) = cameraFlow.onPermissionChanged(allGranted)
 
     fun setupCamera(
         displayRotation: Int,
     ) {
-        cameraHolder = CameraHolder(displayRotation = displayRotation)
-        cameraHolder.setupCamera()
+        cameraFlow = CameraFlow(displayRotation = displayRotation)
+        cameraFlow.setupCamera()
     }
 
     fun releaseCamera() {
-        cameraHolder.releaseCamera()
+        cameraFlow.releaseCamera()
     }
 
-    fun setSurfaceView(glSurfaceView: GLSurfaceView) = cameraHolder.setSurfaceView(glSurfaceView)
+    fun setSurfaceView(glSurfaceView: GLSurfaceView) = cameraFlow.setSurfaceView(glSurfaceView)
 
     suspend fun onCapture() {
-        val outputItem = cameraHolder.currentOutputItemFlow.value ?: return
+        val outputItem = cameraFlow.currentOutputItemFlow.value ?: return
         val extName = outputItem.outputMode.extName
         val time = System.currentTimeMillis()
         val outputFile = File(getStoragePath(), "YAO_$time.$extName")
-        cameraHolder.capture(
+        cameraFlow.capture(
             outputFile,
             additionalRotation = saveImageOrientation.value,
         )
@@ -188,7 +188,7 @@ class CameraRawViewModel : ViewModel() {
         get() = captureController.focusRequestTriggerFlow
 
     fun focusCancel() {
-        cameraHolder.focusCancel()
+        cameraFlow.focusCancel()
         viewModelScope.launch {
             delay(2000L)
             if (focusRequestTriggerFlow.value?.focusCancel == true) {
@@ -198,7 +198,7 @@ class CameraRawViewModel : ViewModel() {
     }
 
     fun focusIdle() {
-        cameraHolder.focusIdle()
+        cameraFlow.focusIdle()
         focusRequestOrientation.value = null
     }
 
@@ -209,12 +209,12 @@ class CameraRawViewModel : ViewModel() {
             yaw = yawFlow.value,
         )
         focusPointRectFlow.value = rect
-        cameraHolder.focusRequest(rect)
+        cameraFlow.focusRequest(rect)
     }
 
-    fun resumeCamera() = cameraHolder.onResume()
+    fun resumeCamera() = cameraFlow.onResume()
 
-    fun pauseCamera() = cameraHolder.onPause()
+    fun pauseCamera() = cameraFlow.onPause()
 
     /**
      *
