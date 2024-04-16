@@ -13,6 +13,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -52,6 +53,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -196,6 +198,14 @@ class CameraRawActivity : ComponentActivity(), CoroutineScope by MainScope() {
                         )
                     }
                 }
+            }
+        }
+
+        launch {
+            try {
+                mViewModel.getTestBitmap(this@CameraRawActivity)
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
         }
 
@@ -479,6 +489,14 @@ fun CameraRawInfoLayer() {
                             prevY = y
                         }
                     }
+                )
+            }
+
+            val testBitmap = viewModel.testBitmap
+            testBitmap.value?.let {
+                Image(
+                    modifier = Modifier.width(160.dp),
+                    bitmap = it.asImageBitmap(), contentDescription = null
                 )
             }
         }

@@ -3,6 +3,7 @@ package com.jvziyaoyao.camera.raw.holder.camera
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.ImageFormat
 import android.hardware.camera2.CameraCaptureSession
 import android.hardware.camera2.CameraCharacteristics
@@ -23,6 +24,8 @@ import android.view.Surface
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.geometry.Rect
 import androidx.exifinterface.media.ExifInterface
+import com.jvziyaoyao.camera.raw.holder.camera.off.OffScreenEGLSurface
+import com.jvziyaoyao.camera.raw.holder.camera.off.OffScreenRender
 import com.jvziyaoyao.camera.raw.util.ContextUtil
 import com.jvziyaoyao.camera.raw.util.testTime
 import kotlinx.coroutines.CoroutineScope
@@ -380,7 +383,7 @@ class CameraHolder(
         launch(Dispatchers.IO) {
             combine(cameraPairListFlow, currentCameraPairFlow) { t1, t2 ->
                 Pair(t1, t2)
-            }.collectLatest { t ->
+            }.collectLatest { _ ->
                 val pairList = cameraPairListFlow.value
                 val currentCameraPair = currentCameraPairFlow.value
                 if (currentCameraPair == null) {
@@ -395,7 +398,7 @@ class CameraHolder(
                 currentCameraPairFlow,
                 resumeTimestampFlow,
                 allPermissionGrantedFlow
-            ) { t1, t2, t3 -> Triple(t1, t2, t3) }.collectLatest { t ->
+            ) { t1, t2, t3 -> Triple(t1, t2, t3) }.collectLatest { _ ->
                 val cameraPair = currentCameraPairFlow.value
                 val allPermissionGrantedFlow = allPermissionGrantedFlow.value
                 val resumeTimeStamp = resumeTimestampFlow.value
@@ -455,7 +458,7 @@ class CameraHolder(
                 captureController.manualSensorParamsFlow,
             ) { t0, t1, t2, t3 ->
                 arrayOf(t0, t1, t2, t3)
-            }.collectLatest { t ->
+            }.collectLatest { _ ->
                 try {
                     val cameraCaptureSession = cameraCaptureSessionFlow.value
                     val cameraDevice = cameraDeviceFlow.value

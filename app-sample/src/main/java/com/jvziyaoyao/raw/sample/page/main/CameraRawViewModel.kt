@@ -1,5 +1,8 @@
 package com.jvziyaoyao.raw.sample.page.main
 
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.opengl.GLSurfaceView
 import android.os.Environment
 import androidx.compose.runtime.mutableStateOf
@@ -7,7 +10,9 @@ import androidx.compose.ui.geometry.Rect
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.jvziyaoyao.camera.raw.holder.camera.CameraHolder
+import com.jvziyaoyao.camera.raw.holder.camera.off.getGLFilterBitmapAsync
 import com.jvziyaoyao.camera.raw.holder.sensor.SensorHolder
+import com.jvziyaoyao.raw.sample.R
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -226,5 +231,12 @@ class CameraRawViewModel : ViewModel() {
     val focusPointRectFlow = MutableStateFlow<Rect?>(null)
 
     val saveImageOrientation = mutableStateOf(0)
+
+    val testBitmap = mutableStateOf<Bitmap?>(null)
+
+    suspend fun getTestBitmap(context: Context) {
+        val bitmap = BitmapFactory.decodeResource(context.resources, R.drawable.scene)
+        testBitmap.value = getGLFilterBitmapAsync(context, bitmap)
+    }
 
 }

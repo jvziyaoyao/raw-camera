@@ -9,6 +9,20 @@ uniform sampler2D additionalTexture;
 uniform bool useAdditionalTexture;
 in vec2 vTexCoord;
 out vec4 vFragColor;
+
+//黑白滤镜
+void blackAndWhite(inout vec4 color) {
+    float threshold = 0.5;
+    float mean = (color.r + color.g + color.b) / 3.0;
+    color.r = color.g = color.b = mean >= threshold ? 1.0 : 0.0;
+}
+
+//灰度滤镜
+void grey(inout vec4 color){
+    float weightMean = color.r * 0.3 + color.g * 0.59 + color.b * 0.11;
+    color.r = color.g = color.b = weightMean;
+}
+
 void main() {
     //    vec4 cameraColor = texture(cameraTexture, vTexCoord);
     //    vec4 additionalColor = texture(additionalTexture, vTexCoord);
@@ -17,9 +31,9 @@ void main() {
     //    float b = additionalColor.b + (1.0 - additionalColor.a) * cameraColor.b;
     //    vFragColor = vec4(r, g, b, 1.0);
 
-//            vFragColor = texture(yTexture, vTexCoord);
-//        vFragColor = texture(uTexture, vTexCoord);
-//        vFragColor = texture(vTexture, vTexCoord);
+    //            vFragColor = texture(yTexture, vTexCoord);
+    //        vFragColor = texture(uTexture, vTexCoord);
+    //        vFragColor = texture(vTexture, vTexCoord);
 
     float y, u, v;
     y = texture(yTexture, vTexCoord).r;
@@ -40,4 +54,6 @@ void main() {
     } else {
         vFragColor = cameraColor;
     }
+
+    grey(vFragColor);
 }
