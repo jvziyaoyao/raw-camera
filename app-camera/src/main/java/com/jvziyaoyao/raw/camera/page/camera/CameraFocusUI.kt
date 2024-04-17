@@ -143,7 +143,6 @@ fun CameraFocusLayer() {
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
-
     ) {
         val scope = rememberCoroutineScope()
         val density = LocalDensity.current
