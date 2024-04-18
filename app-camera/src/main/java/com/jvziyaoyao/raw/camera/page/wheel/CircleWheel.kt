@@ -113,10 +113,10 @@ private fun calculatePoint(
     return Offset(x, y)
 }
 
-class CircleWheelState(
-    val items: List<CircularItem>,
+class CircleWheelState<T>(
+    val items: List<CircularItem<T>>,
     useBound: Boolean = true,
-    defaultItem: CircularItem? = null,
+    defaultItem: CircularItem<T>? = null,
 ) {
 
     val rotationAnimation = Animatable(0F)
@@ -125,20 +125,21 @@ class CircleWheelState(
 
     val slowingDown = mutableStateOf(false)
 
-    val currentItem = mutableStateOf<CircularItem?>(defaultItem)
+    val currentItem = mutableStateOf<CircularItem<T>?>(defaultItem)
 
     init {
         runBlocking {
             defaultItem?.let {
                 rotationAnimation.snapTo(getRotationValue(it.angle))
-                if (useBound) {
-                    val angle01 = getTargetRotationValue(items.first().angle)
-                    val angle02 = getTargetRotationValue(items.last().angle)
-                    rotationAnimation.updateBounds(
-                        lowerBound = (if (angle01 < angle02) angle01 else angle02),
-                        upperBound = (if (angle01 > angle02) angle01 else angle02),
-                    )
-                }
+            }
+            if (useBound) {
+                val angle01 = getTargetRotationValue(items.first().angle)
+                val angle02 = getTargetRotationValue(items.last().angle)
+                rotationAnimation.updateBounds(
+                    lowerBound = (if (angle01 < angle02) angle01 else angle02),
+                    upperBound = (if (angle01 > angle02) angle01 else angle02),
+                )
+                Log.i("TAG", "rotationAnimation.updateBounds: ${rotationAnimation.lowerBound} ~ ${rotationAnimation.upperBound}")
             }
         }
     }
@@ -155,7 +156,7 @@ class CircleWheelState(
         }
     }
 
-    suspend fun animateToItem(item: CircularItem) {
+    suspend fun animateToItem(item: CircularItem<T>) {
         var nextRotation = getTargetRotationValue(item.angle)
         if (nextRotation == 0F) nextRotation = 360F
         val originalRotation = rotationAnimation.value
@@ -170,7 +171,7 @@ class CircleWheelState(
         rotationAnimation.animateTo(nextRotation)
     }
 
-    suspend fun snapToItem(item: CircularItem) {
+    suspend fun snapToItem(item: CircularItem<T>) {
         val nextRotation = getTargetRotationValue(item.angle)
         rotationAnimation.snapTo(nextRotation)
     }
@@ -178,8 +179,8 @@ class CircleWheelState(
 }
 
 @Composable
-fun HalfCircleWheel(
-    circleWheelState: CircleWheelState,
+fun <T> HalfCircleWheel(
+    circleWheelState: CircleWheelState<T>,
     wheelBackground: Color = Color.Gray.copy(0.2F),
     debugMode: Boolean = false,
 ) {
@@ -225,9 +226,9 @@ fun HalfCircleWheel(
 }
 
 @Composable
-fun CircleWheel(
+fun <T> CircleWheel(
     modifier: Modifier = Modifier,
-    state: CircleWheelState,
+    state: CircleWheelState<T>,
     wheelBackground: Color = Color.Transparent,
     debugMode: Boolean = false,
     content: @Composable () -> Unit,
@@ -260,7 +261,7 @@ fun CircleWheel(
                 }
                 LaunchedEffect(rotationAnimation.value) {
                     val rotation = getRotationValue(rotationAnimation.value)
-                    var preItem: CircularItem? = null
+                    var preItem: CircularItem<T>? = null
                     for ((index, circularItem) in items.withIndex()) {
                         if (circularItem.value == null) continue
                         if (index == 0) {
@@ -406,16 +407,16 @@ fun CircleWheel(
     }
 }
 
-data class CircularItem(
+data class CircularItem<T>(
     val angle: Float,
     val label: String?,
     val primary: Boolean,
-    val value: Int?,
+    val value: T?,
 )
 
 @Composable
-fun CircularScale(
-    items: List<CircularItem>,
+fun <T> CircularScale(
+    items: List<CircularItem<T>>,
     debugMode: Boolean = false,
 ) {
     Box(

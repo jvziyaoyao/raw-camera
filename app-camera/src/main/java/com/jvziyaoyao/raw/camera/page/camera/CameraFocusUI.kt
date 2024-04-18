@@ -251,7 +251,8 @@ fun CameraFocusLayer() {
             val wrapAlpha =
                 animateFloatAsState(
                     targetValue =
-                    if (focusRequestTrigger.value?.focusCancel == true) 0.5F
+                    if (focusRequestOrientation.value == null) 0F
+                    else if (focusRequestTrigger.value?.focusCancel == true) 0.5F
                     else if (focusRequestTrigger.value?.focusIdle != true) 1F
                     else 0F
                 )
@@ -277,7 +278,6 @@ fun CameraFocusLayer() {
                             width = density.run { pointRect.width.toDp() },
                             height = density.run { pointRect.height.toDp() },
                         )
-
                 )
 
                 val iconSize = 20.dp

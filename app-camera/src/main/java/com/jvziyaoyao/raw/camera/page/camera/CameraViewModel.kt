@@ -3,8 +3,14 @@ package com.jvziyaoyao.raw.camera.page.camera
 import android.hardware.camera2.CameraMetadata
 import android.opengl.GLSurfaceView
 import android.os.Environment
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CenterFocusWeak
+import androidx.compose.material.icons.filled.SportsHandball
+import androidx.compose.material.icons.filled.Texture
+import androidx.compose.material.icons.filled.WbIncandescent
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.ViewModel
 import com.jvziyaoyao.camera.raw.holder.camera.CameraFlow
 import com.jvziyaoyao.camera.raw.holder.camera.chooseDefaultCameraPair
@@ -12,6 +18,18 @@ import com.jvziyaoyao.camera.raw.holder.camera.isFrontCamera
 import com.jvziyaoyao.camera.raw.holder.sensor.SensorFlow
 import kotlinx.coroutines.flow.map
 import java.io.File
+
+enum class PictureMode(
+    val label: String,
+) {
+    Normal(
+        label = "拍照",
+    ),
+    Manual(
+        label = "手动",
+    ),
+    ;
+}
 
 class CameraViewModel : ViewModel() {
 
@@ -153,9 +171,9 @@ class CameraViewModel : ViewModel() {
      *
      */
 
-    val captureLoading = mutableStateOf(false)
+    val pictureMode = mutableStateOf(PictureMode.Manual)
 
-//    val focusRequestOrientation = mutableStateOf<FocusRequestOrientation?>(null)
+    val captureLoading = mutableStateOf(false)
 
     val saveImageOrientation = mutableStateOf(0)
 

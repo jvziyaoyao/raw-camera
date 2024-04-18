@@ -53,5 +53,5 @@ void main() {
         vFragColor = cameraColor;
     }
 
-    grey(vFragColor);
+//    grey(vFragColor);
 }

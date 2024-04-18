@@ -3,6 +3,7 @@ package com.jvziyaoyao.raw.camera.page.camera
 import android.opengl.GLSurfaceView
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.view.Surface
 import android.view.ViewGroup
 import android.widget.FrameLayout
@@ -12,6 +13,8 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -65,6 +68,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
@@ -151,6 +155,22 @@ fun CameraBody() {
                 if (viewModel.gridEnable.value) CameraGridIndicator()
                 CameraFocusLayer()
                 CameraFaceDetectLayer()
+
+                val pictureMode = viewModel.pictureMode
+                AnimatedVisibility(
+                    visible = pictureMode.value == PictureMode.Manual,
+                    enter = scaleIn(
+                        animationSpec = tween(200),
+                        transformOrigin = TransformOrigin(0.5F, 1F)
+                    ) + fadeIn(),
+                    exit = scaleOut(
+                        animationSpec = tween(200),
+                        transformOrigin = TransformOrigin(0.5F, 1F)
+                    ) + fadeOut(),
+                ) {
+                    CameraManualLayer()
+                }
+
                 CameraCaptureInfoLayer()
                 if (viewModel.levelIndicatorEnable.value) CameraSeaLevelIndicator()
             }
@@ -319,30 +339,25 @@ fun CameraCaptureButton(
     }
 }
 
-enum class PictureMode(
-    val label: String,
-) {
-    Normal(
-        label = "拍照",
-    ),
-    Manual(
-        label = "手动",
-    ),
-    ;
-}
-
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun CameraPictureModeRow() {
+    val viewModel: CameraViewModel = koinViewModel()
     val scope = rememberCoroutineScope()
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
         val itemCount = 5
         val itemEmptyCount = itemCount / 2
         val itemWidth = maxWidth.div(itemCount)
-        val lazyListState = rememberLazyListState()
+        val pictureMode = viewModel.pictureMode
+        val lazyListState = rememberLazyListState(PictureMode.entries.indexOf(pictureMode.value))
         val centerIndex by remember {
             derivedStateOf {
                 lazyListState.firstVisibleItemIndex
+            }
+        }
+        LaunchedEffect(centerIndex, lazyListState.isScrollInProgress) {
+            if (!lazyListState.isScrollInProgress) {
+                pictureMode.value = PictureMode.entries[centerIndex]
             }
         }
         LazyRow(
