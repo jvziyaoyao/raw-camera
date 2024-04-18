@@ -1,6 +1,12 @@
 package com.jvziyaoyao.raw.camera.page.camera
 
 import android.util.Log
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -27,6 +33,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.jvziyaoyao.camera.raw.holder.camera.focalDistanceRange
 import com.jvziyaoyao.raw.camera.page.wheel.CircleWheelState
@@ -61,21 +68,21 @@ enum class ManualControlItem(
 
 fun getFocalDistanceWheelItems(lower: Float, upper: Float): List<CircularItem<Float>> {
     val items = mutableListOf<CircularItem<Float>>()
-    val fullAngle = 120F
-    val numTicks = 12
+    val fullAngle = 100F
+    val numTicks = 10
     val anglePerTick = fullAngle / numTicks
     val allWheelsValue = upper - lower
     fun getWheelValue(angle: Double): Float {
-        return (lower + allWheelsValue.times(angle.div(fullAngle))).toFloat()
+        return (lower + allWheelsValue.times(1 - angle.div(fullAngle))).toFloat()
     }
     for (i in 0..numTicks) {
         val angle = i * anglePerTick
         items.add(
             CircularItem(
                 angle = angle,
-                label = "${angle.toInt()}",
+                label = if (i == 0) "自动" else if (i % 2 == 0) "${angle.toInt()}" else null,
                 primary = true,
-                value = getWheelValue(angle.toDouble()),
+                value = if (i == 0) -1F else getWheelValue(angle.toDouble()),
             )
         )
         if (i == numTicks) break
@@ -101,32 +108,48 @@ fun CameraManualLayer() {
     val viewModel: CameraViewModel = koinViewModel()
     Column(modifier = Modifier.fillMaxSize()) {
         Spacer(modifier = Modifier.weight(1F))
+        val actionBackgroundColor = MaterialTheme.colorScheme.background.copy(0.2F)
 
         val currentCharacteristic =
             viewModel.currentCameraCharacteristicsFlow.collectAsState(initial = null)
 
+        val selectedManualItem = remember { mutableStateOf<ManualControlItem?>(null) }
+
         currentCharacteristic.value?.apply {
             focalDistanceRange?.let {
-                val items = remember { getFocalDistanceWheelItems(it.lower, it.upper) }
-                val circleWheelState = remember { CircleWheelState(items = items) }
-                LaunchedEffect(circleWheelState.currentItem.value) {
-                    Log.i(
-                        "TAG",
-                        "CameraManualLayer: circleWheelState ${circleWheelState.currentItem.value}"
+                AnimatedVisibility(
+                    visible = selectedManualItem.value == ManualControlItem.FocalDistance,
+                    enter = scaleIn(
+                        animationSpec = tween(200),
+                        transformOrigin = TransformOrigin(0.5F, 1F)
+                    ) + fadeIn(),
+                    exit = scaleOut(
+                        animationSpec = tween(200),
+                        transformOrigin = TransformOrigin(0.5F, 1F)
+                    ) + fadeOut(),
+                ) {
+                    val items = remember { getFocalDistanceWheelItems(it.lower, it.upper) }
+                    val circleWheelState =
+                        remember { CircleWheelState(items = items, defaultItem = items.first()) }
+                    LaunchedEffect(circleWheelState.currentItem.value) {
+                        val focalDistance = circleWheelState.currentItem.value?.value
+                        viewModel.captureController.focalDistanceFlow.value =
+                            if (focalDistance == -1F) null else focalDistance
+                    }
+                    HalfCircleWheel(
+                        circleWheelState = circleWheelState,
+                        indicatorColor = MaterialTheme.colorScheme.primary,
+                        wheelBackground = actionBackgroundColor,
                     )
-                    viewModel.captureController.focalDistanceFlow.value = circleWheelState.currentItem.value?.value?.toFloat()
                 }
-                HalfCircleWheel(circleWheelState = circleWheelState)
             }
         }
 
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.background.copy(0.2F))
+                .background(actionBackgroundColor)
         ) {
-            val selectedManualItem = remember { mutableStateOf<ManualControlItem?>(null) }
-
             @Composable
             fun RowButton(
                 selected: Boolean,

@@ -12,9 +12,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -130,7 +132,9 @@ class CircleWheelState<T>(
     init {
         runBlocking {
             defaultItem?.let {
-                rotationAnimation.snapTo(getRotationValue(it.angle))
+                var defaultAngle = getRotationValue(it.angle)
+                if (defaultAngle == 0F) defaultAngle = 360F
+                rotationAnimation.snapTo(defaultAngle)
             }
             if (useBound) {
                 val angle01 = getTargetRotationValue(items.first().angle)
@@ -139,7 +143,10 @@ class CircleWheelState<T>(
                     lowerBound = (if (angle01 < angle02) angle01 else angle02),
                     upperBound = (if (angle01 > angle02) angle01 else angle02),
                 )
-                Log.i("TAG", "rotationAnimation.updateBounds: ${rotationAnimation.lowerBound} ~ ${rotationAnimation.upperBound}")
+                Log.i(
+                    "TAG",
+                    "rotationAnimation.updateBounds: ${rotationAnimation.lowerBound} ~ ${rotationAnimation.upperBound}"
+                )
             }
         }
     }
@@ -181,6 +188,7 @@ class CircleWheelState<T>(
 @Composable
 fun <T> HalfCircleWheel(
     circleWheelState: CircleWheelState<T>,
+    indicatorColor: Color = Color.Red,
     wheelBackground: Color = Color.Gray.copy(0.2F),
     debugMode: Boolean = false,
 ) {
@@ -215,6 +223,7 @@ fun <T> HalfCircleWheel(
                         .align(Alignment.Center)
                         .size(circularSizePx.toDp()),
                     state = circleWheelState,
+                    indicatorColor = indicatorColor,
                     wheelBackground = wheelBackground,
                     debugMode = debugMode,
                 ) {
@@ -229,6 +238,7 @@ fun <T> HalfCircleWheel(
 fun <T> CircleWheel(
     modifier: Modifier = Modifier,
     state: CircleWheelState<T>,
+    indicatorColor: Color = Color.Red,
     wheelBackground: Color = Color.Transparent,
     debugMode: Boolean = false,
     content: @Composable () -> Unit,
@@ -375,6 +385,18 @@ fun <T> CircleWheel(
                         content()
                     }
 
+                    Box(
+                        modifier = Modifier
+                            .height(
+                                maxHeightPx
+                                    .times(0.04F)
+                                    .toDp()
+                            )
+                            .width(2.dp)
+                            .background(indicatorColor)
+                            .align(Alignment.TopCenter)
+                    )
+
                     if (debugMode) {
                         Box(
                             modifier = Modifier
@@ -450,9 +472,8 @@ fun <T> CircularScale(
                         circularItem.apply {
                             val start = calculatePoint(centerX, centerY, outerRadius, angle)
                             val end = calculatePoint(centerX, centerY, innerRadius, angle)
-                            val lineColor = if (index == 0) Color.Red
-                            else if (circularItem.primary) Color.Black
-                            else Color.Gray
+                            val lineColor = if (circularItem.primary) Color.White.copy(0.88F)
+                            else Color.White.copy(0.2F)
                             drawLine(
                                 lineColor,
                                 Offset(start.x, start.y),
@@ -474,7 +495,7 @@ fun <T> CircularScale(
                                     calculatePoint(centerX, centerY, textRadius, angle)
                                 if (debugMode) {
                                     drawLine(
-                                        Color.Gray,
+                                        Color.White.copy(0.2F),
                                         Offset(textStart.x, textStart.y),
                                         Offset(centerX, centerY),
                                         strokeWidth

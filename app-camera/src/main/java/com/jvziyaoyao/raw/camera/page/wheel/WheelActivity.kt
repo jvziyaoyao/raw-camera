@@ -1,10 +1,12 @@
 package com.jvziyaoyao.raw.camera.page.wheel
 
 import android.os.Bundle
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -126,8 +128,7 @@ fun getWheelItems03(): List<CircularItem<Int>> {
 fun WheelBody() {
     LocalDensity.current.apply {
         val debugMode = true
-        Box(modifier = Modifier.fillMaxSize()) {
-
+        Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
