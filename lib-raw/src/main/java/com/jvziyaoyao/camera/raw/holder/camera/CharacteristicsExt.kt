@@ -153,11 +153,5 @@ val CameraCharacteristics.sensorAspectRatio: Float
 
 const val defaultSensorAspectRatio = 4F.div(3F)
 
-//fun StreamConfigurationMap.printOutputFormat(): String {
-//    val imageFormatClass = ImageFormat::class.java
-//    outputFormats.forEach {
-//        imageFormatClass.fields.forEach { field ->
-//
-//        }
-//    }
-//}
+val CameraCharacteristics.flashInfoAvailable: Boolean?
+    get() = this[CameraCharacteristics.FLASH_INFO_AVAILABLE]

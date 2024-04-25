@@ -108,6 +108,9 @@ val CaptureResult.afTrigger: Int?
 val CaptureResult.aeTrigger: Int?
     get() = get(CaptureResult.CONTROL_AE_PRECAPTURE_TRIGGER)
 
+val CaptureResult.afMode: Int?
+    get() = get(CaptureResult.CONTROL_AF_MODE)
+
 val CaptureResult.afState: Int?
     get() = get(CaptureResult.CONTROL_AF_STATE)
 

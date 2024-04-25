@@ -251,8 +251,7 @@ fun <T> CircleWheel(
                 .background(wheelBackground)
         ) {
             LocalDensity.current.apply {
-                val context = LocalContext.current
-                val vibratorHelper = remember { VibratorHelper(context) }
+                val vibratorHelper = LocalVibratorHelper.current
                 val scope = rememberCoroutineScope()
                 val maxWidthPx = maxWidth.toPx()
                 val maxHeightPx = maxHeight.toPx()
@@ -285,7 +284,7 @@ fun <T> CircleWheel(
                                         preItem else circularItem
                                 if (nextItem != currentItem.value) {
                                     currentItem.value = nextItem
-                                    vibratorHelper.playWheelVibrate()
+                                    vibratorHelper.playTickVibrate()
                                 }
                                 break
                             }
@@ -428,6 +427,10 @@ fun <T> CircleWheel(
         }
     }
 }
+
+data class ItemValue<T>(
+    val value: T?,
+)
 
 data class CircularItem<T>(
     val angle: Float,

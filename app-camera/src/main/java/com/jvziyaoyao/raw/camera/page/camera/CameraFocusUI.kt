@@ -1,6 +1,7 @@
 package com.jvziyaoyao.raw.camera.page.camera
 
 import android.hardware.camera2.CameraMetadata
+import android.util.Log
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
@@ -171,12 +172,15 @@ fun CameraFocusLayer() {
         val currentPitch = viewModel.pitchFlow.collectAsState()
         val currentRoll = viewModel.rollFlow.collectAsState()
         val currentYaw = viewModel.yawFlow.collectAsState()
-        fun cancelFocus() {
+        val focusCancelTarget = remember { mutableStateOf(false) }
+        fun cancelThisFocus() {
             scope.launch {
-                viewModel.focusCancel()
-                delay(2000L)
-                if (focusRequestTrigger.value?.focusCancel == true) {
-                    viewModel.focusIdle()
+                focusCancelTarget.value = true
+                delay(2000)
+                if (focusCancelTarget.value) {
+                    viewModel.focusCancel()
+                    focusCancelTarget.value = false
+                    focusRequestOrientation.value = null
                 }
             }
         }
@@ -190,14 +194,13 @@ fun CameraFocusLayer() {
                 val delta = 10F
                 val delay = 1000 * 2 // 两秒内不要取消
                 if (
-                    (System.currentTimeMillis() - timestamp > delay)
-                    && ((currentPitch.value - pitch).absoluteValue > delta
+                    ((System.currentTimeMillis() - timestamp > delay)
+                            && ((currentPitch.value - pitch).absoluteValue > delta
                             || (currentRoll.value - roll).absoluteValue > delta
-                            || (currentYaw.value - yaw).absoluteValue > delta)
-                    && focusRequestTrigger.value?.focusCancel != true
-                    && focusRequestTrigger.value?.focusIdle != true
+                            || (currentYaw.value - yaw).absoluteValue > delta))
+                    && !focusCancelTarget.value
                 ) {
-                    cancelFocus()
+                    cancelThisFocus()
                 }
             }
         }
@@ -227,6 +230,7 @@ fun CameraFocusLayer() {
                                 roll = viewModel.rollFlow.value,
                                 yaw = viewModel.yawFlow.value,
                             )
+                            focusCancelTarget.value = false
                             viewModel.focusRequest(focusPointRect.value)
                             scope.launch {
                                 focusScale.snapTo(2F)
@@ -251,10 +255,10 @@ fun CameraFocusLayer() {
             val wrapAlpha =
                 animateFloatAsState(
                     targetValue =
-                    if (focusRequestOrientation.value == null) 0F
-                    else if (focusRequestTrigger.value?.focusCancel == true) 0.5F
-                    else if (focusRequestTrigger.value?.focusIdle != true) 1F
-                    else 0F
+                    if (focusRequestOrientation.value != null) {
+                        if (focusCancelTarget.value) 0.5F
+                        else 1F
+                    } else 0F
                 )
             Box(
                 modifier = Modifier
@@ -301,22 +305,6 @@ fun CameraFocusLayer() {
                     imageVector = Icons.Filled.WbSunny,
                     tint = MaterialTheme.colorScheme.primary,
                     contentDescription = null
-                )
-            }
-
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = Layout.padding.pl)
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.onBackground.copy(0.4F))
-            ) {
-                Text(
-                    modifier = Modifier.align(Alignment.Center),
-                    text = "${zoomRatio.value.formatToDecimalPlaces(1)}X",
-                    fontSize = Layout.fontSize.fxs,
-                    color = MaterialTheme.colorScheme.background.copy(0.6F),
                 )
             }
         }

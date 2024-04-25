@@ -157,8 +157,6 @@ class CameraViewModel : ViewModel() {
 
     fun focusCancel() = cameraFlow.focusCancel()
 
-    fun focusIdle() = cameraFlow.focusIdle()
-
     fun focusRequest(rect: Rect) = cameraFlow.focusRequest(rect)
 
     fun resumeCamera() = cameraFlow.onResume()

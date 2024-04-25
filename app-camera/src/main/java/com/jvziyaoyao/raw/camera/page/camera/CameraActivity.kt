@@ -70,6 +70,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -81,7 +82,11 @@ import com.jvziyaoyao.camera.raw.holder.camera.sensorAspectRatio
 import com.jvziyaoyao.raw.camera.base.BaseActivity
 import com.jvziyaoyao.raw.camera.base.CommonPermissions
 import com.jvziyaoyao.raw.camera.base.DynamicStatusBarColor
+import com.jvziyaoyao.raw.camera.base.FadeAnimatedVisibility
+import com.jvziyaoyao.raw.camera.base.ScaleAnimatedVisibility
 import com.jvziyaoyao.raw.camera.base.animateRotationAsState
+import com.jvziyaoyao.raw.camera.page.wheel.LocalVibratorHelper
+import com.jvziyaoyao.raw.camera.page.wheel.VibratorHelper
 import com.jvziyaoyao.raw.camera.ui.theme.Layout
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -118,7 +123,10 @@ class CameraActivity : BaseActivity() {
                     mViewModel.onPermissionChanged(it)
                 }
             ) {
-                CameraBody()
+                val vibratorHelper = remember { VibratorHelper(this) }
+                CompositionLocalProvider(LocalVibratorHelper provides vibratorHelper) {
+                    CameraBody()
+                }
             }
         }
     }
@@ -157,18 +165,15 @@ fun CameraBody() {
                 CameraFaceDetectLayer()
 
                 val pictureMode = viewModel.pictureMode
-                AnimatedVisibility(
+                ScaleAnimatedVisibility(
                     visible = pictureMode.value == PictureMode.Manual,
-                    enter = scaleIn(
-                        animationSpec = tween(200),
-                        transformOrigin = TransformOrigin(0.5F, 1F)
-                    ) + fadeIn(),
-                    exit = scaleOut(
-                        animationSpec = tween(200),
-                        transformOrigin = TransformOrigin(0.5F, 1F)
-                    ) + fadeOut(),
                 ) {
                     CameraManualLayer()
+                }
+                FadeAnimatedVisibility(
+                    visible = pictureMode.value == PictureMode.Normal,
+                ) {
+                    CameraNormalLayer()
                 }
 
                 CameraCaptureInfoLayer()
@@ -344,6 +349,7 @@ fun CameraCaptureButton(
 fun CameraPictureModeRow() {
     val viewModel: CameraViewModel = koinViewModel()
     val scope = rememberCoroutineScope()
+    val vibratorHelper = LocalVibratorHelper.current
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
         val itemCount = 5
         val itemEmptyCount = itemCount / 2
@@ -358,6 +364,7 @@ fun CameraPictureModeRow() {
         LaunchedEffect(centerIndex, lazyListState.isScrollInProgress) {
             if (!lazyListState.isScrollInProgress) {
                 pictureMode.value = PictureMode.entries[centerIndex]
+                vibratorHelper.playTickVibrate()
             }
         }
         LazyRow(

@@ -64,17 +64,21 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.jvziyaoyao.camera.raw.holder.camera.FlashMode
 import com.jvziyaoyao.camera.raw.holder.camera.SceneMode
 import com.jvziyaoyao.camera.raw.holder.camera.aeCompensationRange
 import com.jvziyaoyao.camera.raw.holder.camera.aeRegions
 import com.jvziyaoyao.camera.raw.holder.camera.aeState
+import com.jvziyaoyao.camera.raw.holder.camera.afMode
 import com.jvziyaoyao.camera.raw.holder.camera.afRegions
 import com.jvziyaoyao.camera.raw.holder.camera.afState
+import com.jvziyaoyao.camera.raw.holder.camera.afTrigger
 import com.jvziyaoyao.camera.raw.holder.camera.cameraManager
 import com.jvziyaoyao.camera.raw.holder.camera.cameraRequirePermissions
 import com.jvziyaoyao.camera.raw.holder.camera.defaultSensorAspectRatio
 import com.jvziyaoyao.camera.raw.holder.camera.faceDetectModes
 import com.jvziyaoyao.camera.raw.holder.camera.faceDetectResult
+import com.jvziyaoyao.camera.raw.holder.camera.flashInfoAvailable
 import com.jvziyaoyao.camera.raw.holder.camera.focalDistanceRange
 import com.jvziyaoyao.camera.raw.holder.camera.getFingerPointRect
 import com.jvziyaoyao.camera.raw.holder.camera.isFrontCamera
@@ -100,6 +104,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
@@ -155,6 +160,27 @@ class CameraRawActivity : ComponentActivity(), CoroutineScope by MainScope() {
             }
         }
 
+//        launch {
+//            combine(
+//                mViewModel.captureController.focusRequestTriggerFlow,
+//                mViewModel.captureResultFlow,
+//            ) { t01, t02 ->
+//                arrayOf(t01, t02)
+//            }.collectLatest {
+//                val focusRequestTrigger = mViewModel.captureController.focusRequestTriggerFlow.value
+//                val captureResult = mViewModel.captureResultFlow.value
+//                if (focusRequestTrigger != null && !focusRequestTrigger.focusCancel) {
+//                    if (captureResult != null) {
+//                        if (captureResult.afState == CameraMetadata.CONTROL_AF_STATE_FOCUSED_LOCKED
+//                            || captureResult.afState == CameraMetadata.CONTROL_AF_STATE_NOT_FOCUSED_LOCKED
+//                        ) {
+//                            mViewModel.focusCancel()
+//                        }
+//                    }
+//                }
+//            }
+//        }
+
         // 监听传感器角度变化
         launch(Dispatchers.IO) {
             combine(
@@ -178,7 +204,6 @@ class CameraRawActivity : ComponentActivity(), CoroutineScope by MainScope() {
                                 || (currentRoll - roll).absoluteValue > delta
                                 || (currentYaw - yaw).absoluteValue > delta)
                         && focusRequestTrigger?.focusCancel != true
-                        && focusRequestTrigger?.focusIdle != true
                     ) {
                         mViewModel.focusCancel()
                     }
@@ -201,13 +226,13 @@ class CameraRawActivity : ComponentActivity(), CoroutineScope by MainScope() {
             }
         }
 
-        launch {
-            try {
-                mViewModel.getTestBitmap(this@CameraRawActivity)
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
+//        launch {
+//            try {
+//                mViewModel.getTestBitmap(this@CameraRawActivity)
+//            } catch (e: Exception) {
+//                e.printStackTrace()
+//            }
+//        }
 
     }
 
@@ -333,8 +358,6 @@ fun CameraRawPreviewLayer(
                                 val color =
                                     if (focusRequestTrigger.value?.focusCancel == true) {
                                         Color.White
-                                    } else if (focusRequestTrigger.value?.focusIdle == true) {
-                                        Color.Transparent
                                     } else Color.Cyan
                                 drawRect(
                                     color = color,
@@ -455,6 +478,10 @@ fun CameraRawInfoLayer() {
             Text(text = "电子变焦：${captureResult.value?.zoomRatio}")
             Text(text = "场景模式：${SceneMode.getByCode(captureResult.value?.sceneMode ?: -1)}")
             Text(text = "OIS：${captureResult.value?.oisEnable}")
+            Text(text = "AFMode：${captureResult.value?.afMode}")
+            Text(text = "AFState：${captureResult.value?.afState}")
+            Text(text = "AFTrigger：${captureResult.value?.afTrigger}")
+            Text(text = "AEState：${captureResult.value?.aeState}")
         }
 
         Column(
@@ -667,6 +694,29 @@ fun CameraRawActionLayer(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    val flashInfoAvailable = cameraCharacteristics.flashInfoAvailable
+                    val currentFlashMode =
+                        viewModel.captureController.flashModeFlow.collectAsState()
+                    if (flashInfoAvailable == true) {
+                        Text(text = "闪光灯：")
+                        Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                            FlashMode.entries.forEach { flashMode ->
+                                Button(
+                                    enabled = currentFlashMode.value != flashMode,
+                                    onClick = {
+                                        viewModel.captureController.flashModeFlow.value = flashMode
+                                    }
+                                ) {
+                                    Text(text = flashMode.name)
+                                }
+                            }
+                        }
+                    } else {
+                        Text(text = "闪光灯：不支持")
+                    }
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(text = "人脸识别：")
                     Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
                         val currentFaceDetectMode =
@@ -805,10 +855,9 @@ fun CameraRawActionLayer(
                             }
                             Slider(
                                 valueRange = 0F..100F,
-                                value = customTemperature.value?.toFloat() ?: 0F,
+                                value = customTemperature.value ?: 0F,
                                 onValueChange = {
-                                    viewModel.captureController.customTemperatureFlow.value =
-                                        it.toInt()
+                                    viewModel.captureController.customTemperatureFlow.value = it
                                 },
                             )
                         }

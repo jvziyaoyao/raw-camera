@@ -44,6 +44,7 @@ import org.opencv.core.CvType
 import org.opencv.core.Mat
 import java.io.File
 import java.nio.ByteBuffer
+import java.util.concurrent.Executors
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 
@@ -116,6 +117,8 @@ class CameraFlow(
 
     private val handler = Handler(handlerThread.looper)
 
+    private val executor = Executors.newSingleThreadExecutor()
+
     private var frameCount = 0
 
     private val yuvDataFlow = MutableStateFlow<YUVRenderData?>(null)
@@ -130,6 +133,29 @@ class CameraFlow(
         // 初始化OpenCV
         OpenCVLoader.initLocal()
     }
+
+//    suspend fun runFlashAE() {
+//        val previewSurface = surfaceFlow.value ?: return
+//        if (cameraCaptureSessionFlow.value == null) return
+//        val cameraDevice = cameraDeviceFlow.value ?: return
+//        val cameraCaptureRequest =
+//            cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
+//                .apply {
+//                    addTarget(previewSurface)
+//                    setCurrentCaptureParams(false, this)
+//                    set(
+//                        CaptureRequest.FLASH_MODE,
+//                        CaptureRequest.FLASH_MODE_SINGLE,
+//                    )
+//                    set(
+//                        CaptureRequest.CONTROL_AE_MODE,
+//                        CaptureRequest.CONTROL_AE_MODE_ON_ALWAYS_FLASH,
+//                    )
+//                }.build()
+//        val captureResult =
+//            cameraCaptureSessionFlow.value?.captureAsync(cameraCaptureRequest, handler)
+//        Log.i(TAG, "runFlashAE: captureResult $captureResult")
+//    }
 
     suspend fun capture(
         outputFile: File? = null,
@@ -150,7 +176,7 @@ class CameraFlow(
                 .apply {
                     imageOutputReader?.apply { addTarget(surface) }
                     set(CaptureRequest.JPEG_ORIENTATION, imageOrientation)
-                    setCurrentCaptureParams(this)
+                    setCurrentCaptureParams(preview = false, trigger = false, builder = this)
                 }.build()
         val captureTimestamp = System.currentTimeMillis()
         val awaitResult = coroutineScope {
@@ -303,38 +329,35 @@ class CameraFlow(
         override fun onImageAvailable(reader: ImageReader?) {
             val image = reader?.acquireNextImage() ?: return
             frameCount++
-            val time = testTime {
-                val width = image.width
-                val height = image.height
-                val plans = image.planes
-                val y = plans[0].buffer
-                val u = plans[1].buffer
-                val v = plans[2].buffer
-                y.position(0)
-                u.position(0)
-                v.position(0)
+            val width = image.width
+            val height = image.height
+            val plans = image.planes
+            val y = plans[0].buffer
+            val u = plans[1].buffer
+            val v = plans[2].buffer
+            y.position(0)
+            u.position(0)
+            v.position(0)
 
-                val yByteBuffer = ByteBuffer.allocateDirect(y.capacity())
-                val uByteBuffer = ByteBuffer.allocateDirect(u.capacity())
-                val vByteBuffer = ByteBuffer.allocateDirect(v.capacity())
-                yByteBuffer.put(y)
-                uByteBuffer.put(u)
-                vByteBuffer.put(v)
-                yByteBuffer.position(0)
-                uByteBuffer.position(0)
-                vByteBuffer.position(0)
+            val yByteBuffer = ByteBuffer.allocateDirect(y.capacity())
+            val uByteBuffer = ByteBuffer.allocateDirect(u.capacity())
+            val vByteBuffer = ByteBuffer.allocateDirect(v.capacity())
+            yByteBuffer.put(y)
+            uByteBuffer.put(u)
+            vByteBuffer.put(v)
+            yByteBuffer.position(0)
+            uByteBuffer.position(0)
+            vByteBuffer.position(0)
 
-                grayMatFlow.value = Mat(height, width, CvType.CV_8UC1, yByteBuffer)
-                yByteBuffer.position(0)
-                yuvDataFlow.value = YUVRenderData(
-                    width = width,
-                    height = height,
-                    yByteArray = yByteBuffer,
-                    uByteArray = uByteBuffer,
-                    vByteArray = vByteBuffer,
-                )
-            }
-//            Log.i(TAG, "previewImageAvailableListener process frame time $time")
+            grayMatFlow.value = Mat(height, width, CvType.CV_8UC1, yByteBuffer)
+            yByteBuffer.position(0)
+            yuvDataFlow.value = YUVRenderData(
+                width = width,
+                height = height,
+                yByteArray = yByteBuffer,
+                uByteArray = uByteBuffer,
+                vByteArray = vByteBuffer,
+            )
             image.close()
         }
     }
@@ -460,18 +483,82 @@ class CameraFlow(
                     val cameraCaptureSession = cameraCaptureSessionFlow.value
                     val cameraDevice = cameraDeviceFlow.value
                     val previewSurface = surfaceFlow.value
+                    val focusRequestTrigger = captureController.focusRequestTriggerFlow.value
                     if (cameraCaptureSession != null && cameraDevice != null && previewSurface != null) {
-                        val captureRequest =
-                            cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply {
-                                addTarget(previewSurface)
-                                setCurrentCaptureParams(this)
-                            }.build()
+                        if (focusRequestTrigger?.focusRequest == true) {
+                            val captureRequest =
+                                cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
+                                    .apply {
+                                        addTarget(previewSurface)
+                                        setCurrentCaptureParams(
+                                            preview = true, trigger = false, builder = this
+                                        )
+                                    }.build()
+                            cameraCaptureSession.setRepeatingRequest(
+                                captureRequest,
+                                previewCaptureCallback,
+                                handler
+                            )
 
-                        cameraCaptureSession.setRepeatingRequest(
-                            captureRequest,
-                            previewCaptureCallback,
-                            handler
-                        )
+                            val triggerCaptureRequest =
+                                cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
+                                    .apply {
+                                        addTarget(previewSurface)
+                                        setCurrentCaptureParams(
+                                            preview = true, trigger = true, builder = this
+                                        )
+                                    }.build()
+                            cameraCaptureSession.captureBurst(
+                                listOf(triggerCaptureRequest),
+                                previewCaptureCallback,
+                                handler
+                            )
+                            focusRequestTrigger.focusRequest = false
+                        } else if (focusRequestTrigger?.focusCancel == true) {
+                            val triggerCaptureRequest =
+                                cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
+                                    .apply {
+                                        addTarget(previewSurface)
+                                        setCurrentCaptureParams(
+                                            preview = true, trigger = true, builder = this
+                                        )
+                                    }.build()
+                            cameraCaptureSession.captureBurst(
+                                listOf(triggerCaptureRequest),
+                                previewCaptureCallback,
+                                handler,
+                            )
+
+                            val captureRequest =
+                                cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
+                                    .apply {
+                                        addTarget(previewSurface)
+                                        setCurrentCaptureParams(
+                                            preview = true, trigger = false, builder = this
+                                        )
+                                    }.build()
+                            cameraCaptureSession.setRepeatingRequest(
+                                captureRequest,
+                                previewCaptureCallback,
+                                handler
+                            )
+
+                            focusRequestTrigger.focusCancel = false
+                        } else {
+                            val captureRequest =
+                                cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
+                                    .apply {
+                                        addTarget(previewSurface)
+                                        setCurrentCaptureParams(
+                                            preview = true, trigger = false, builder = this
+                                        )
+                                    }.build()
+                            cameraCaptureSession.setRepeatingRequest(
+                                captureRequest,
+                                previewCaptureCallback,
+                                handler
+                            )
+                        }
                     }
                 } catch (e: Exception) {
                     e.printStackTrace()
@@ -680,8 +767,11 @@ class CameraFlow(
 
     val captureController = CaptureController()
 
-    private fun setCurrentCaptureParams(builder: CaptureRequest.Builder) =
-        captureController.setCurrentCaptureParams(builder)
+    private fun setCurrentCaptureParams(
+        preview: Boolean,
+        trigger: Boolean,
+        builder: CaptureRequest.Builder
+    ) = captureController.setCurrentCaptureParams(preview, trigger, builder)
 
     fun focusRequest(rect: Rect) {
         val cameraPair = currentCameraPairFlow.value
@@ -702,10 +792,6 @@ class CameraFlow(
 
     fun focusCancel() {
         captureController.focusCancel()
-    }
-
-    fun focusIdle() {
-        captureController.focusIdle()
     }
 
 }

@@ -6,6 +6,11 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.compositionLocalOf
+import com.jvziyaoyao.camera.raw.util.ContextUtil
+
+val LocalVibratorHelper =
+    compositionLocalOf { VibratorHelper(ContextUtil.getApplicationByReflect()) }
 
 class VibratorHelper(
     context: Context,
@@ -19,7 +24,7 @@ class VibratorHelper(
         context.getSystemService(ComponentActivity.VIBRATOR_SERVICE) as Vibrator
     }
 
-    fun playWheelVibrate() {
+    fun playTickVibrate() {
         val pattern = longArrayOf(10)
         if (mVibrator.hasVibrator()) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

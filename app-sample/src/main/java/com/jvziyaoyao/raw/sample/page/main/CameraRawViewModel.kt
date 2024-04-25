@@ -66,7 +66,6 @@ data class FocusRequestOrientation(
     var timestamp: Long = System.currentTimeMillis(),
 )
 
-
 class CameraRawViewModel : ViewModel() {
 
     /**
@@ -189,17 +188,6 @@ class CameraRawViewModel : ViewModel() {
 
     fun focusCancel() {
         cameraFlow.focusCancel()
-        viewModelScope.launch {
-            delay(2000L)
-            if (focusRequestTriggerFlow.value?.focusCancel == true) {
-                focusIdle()
-            }
-        }
-    }
-
-    fun focusIdle() {
-        cameraFlow.focusIdle()
-        focusRequestOrientation.value = null
     }
 
     fun focusRequest(rect: Rect) {

@@ -9,6 +9,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -26,20 +27,21 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.jvziyaoyao.camera.raw.holder.camera.focalDistanceRange
+import com.jvziyaoyao.raw.camera.base.ScaleAnimatedVisibility
 import com.jvziyaoyao.raw.camera.page.wheel.CircleWheelState
 import com.jvziyaoyao.raw.camera.page.wheel.CircularItem
 import com.jvziyaoyao.raw.camera.page.wheel.HalfCircleWheel
-import com.jvziyaoyao.raw.camera.page.wheel.getWheelItems03
+import com.jvziyaoyao.raw.camera.page.wheel.ItemValue
 import com.jvziyaoyao.raw.camera.ui.theme.Layout
 import org.koin.androidx.compose.koinViewModel
 
@@ -59,35 +61,54 @@ enum class ManualControlItem(
         label = "对焦",
         icon = Icons.Filled.CenterFocusWeak,
     ),
-    WhiteBalance(
+    Temperature(
         label = "白平衡",
         icon = Icons.Filled.WbIncandescent,
     ),
     ;
 }
 
-fun getFocalDistanceWheelItems(lower: Float, upper: Float): List<CircularItem<Float>> {
-    val items = mutableListOf<CircularItem<Float>>()
+fun getFocalDistanceWheelItems(lower: Float, upper: Float): List<CircularItem<ItemValue<Float?>>> {
+    val items = mutableListOf<CircularItem<ItemValue<Float?>>>()
     val fullAngle = 100F
     val numTicks = 10
     val anglePerTick = fullAngle / numTicks
+    val innerTicks = 6
+    val innerPerTick = anglePerTick / innerTicks
     val allWheelsValue = upper - lower
     fun getWheelValue(angle: Double): Float {
-        return (lower + allWheelsValue.times(1 - angle.div(fullAngle))).toFloat()
+        return (lower + allWheelsValue.times(1 - (angle - anglePerTick).div(fullAngle))).toFloat()
     }
-    for (i in 0..numTicks) {
+    items.add(
+        CircularItem(
+            angle = 0F,
+            label = "自动",
+            primary = true,
+            value = ItemValue(null),
+        )
+    )
+    for (e in 1 until innerTicks) {
+        val innerAngle = e * innerPerTick
+        items.add(
+            CircularItem(
+                angle = innerAngle,
+                label = null,
+                primary = false,
+                value = null,
+            )
+        )
+    }
+    for (i in 1..numTicks) {
         val angle = i * anglePerTick
         items.add(
             CircularItem(
                 angle = angle,
-                label = if (i == 0) "自动" else if (i % 2 == 0) "${angle.toInt()}" else null,
+                label = if (i == numTicks) "无限远" else if (i % 2 == 0) "${angle.toInt()}" else null,
                 primary = true,
-                value = if (i == 0) -1F else getWheelValue(angle.toDouble()),
+                value = ItemValue(getWheelValue(angle.toDouble())),
             )
         )
         if (i == numTicks) break
-        val innerTicks = 6
-        val innerPerTick = anglePerTick / innerTicks
         for (e in 1 until innerTicks) {
             val innerAngle = angle + e * innerPerTick
             items.add(
@@ -95,10 +116,135 @@ fun getFocalDistanceWheelItems(lower: Float, upper: Float): List<CircularItem<Fl
                     angle = innerAngle,
                     label = null,
                     primary = false,
-                    value = if (e % 2 == 0) getWheelValue(innerAngle.toDouble()) else null,
+                    value = if (e % 2 == 0) ItemValue(getWheelValue(innerAngle.toDouble())) else null,
                 )
             )
         }
+    }
+    return items
+}
+
+/**
+ *
+ * 2800
+ * 2800 白炽灯
+ * 4100 日光灯
+ * 5000 晴天
+ * 6500 阴天
+ * 10000K
+ *
+ */
+fun getTemperatureWheelItems(): List<CircularItem<ItemValue<Float?>>> {
+    val items = mutableListOf<CircularItem<ItemValue<Float?>>>()
+    val perAngle = 1.66666F
+    var currentAngle = 0F
+    fun addStepIndex() {
+        currentAngle += perAngle
+    }
+    items.add(
+        CircularItem(
+            angle = currentAngle,
+            label = "自动",
+            primary = true,
+            value = ItemValue(null),
+        )
+    )
+    addStepIndex()
+    for (i in 0..8) {
+        items.add(
+            CircularItem(
+                angle = currentAngle,
+                label = null,
+                primary = false,
+                value = null,
+            )
+        )
+        addStepIndex()
+    }
+    for (i in 2800..10000 step 100) {
+        val primary = i == 2800 || i == 4100
+                || i == 5000 || i == 6500 || i == 10000
+        val value = (i - 2800).toFloat().div(10000 - 2800).times(100)
+        items.add(
+            CircularItem(
+                angle = currentAngle,
+                label = if (primary) "$i" else null,
+                primary = primary,
+                value = ItemValue(value),
+            )
+        )
+        addStepIndex()
+    }
+
+    return items
+}
+
+fun <T> getTypeWheelItems(
+    list: List<T>,
+    getLabel: (T) -> String,
+): List<CircularItem<ItemValue<T?>>> {
+    val perAngle = 1.66666F
+    val items = mutableListOf<CircularItem<ItemValue<T?>>>()
+    var currentAngle = 0F
+    var borderIndex = 0
+    fun addStepIndex() {
+        currentAngle += perAngle
+        borderIndex++
+        if (borderIndex >= 6) {
+            borderIndex = 0
+        }
+    }
+
+    items.add(
+        CircularItem(
+            angle = currentAngle,
+            label = "自动",
+            primary = true,
+            value = ItemValue(null),
+        )
+    )
+    addStepIndex()
+    for (i in 0..4) {
+        items.add(
+            CircularItem(
+                angle = currentAngle,
+                label = null,
+                primary = false,
+                value = null,
+            )
+        )
+        addStepIndex()
+    }
+
+    var showLabel = false
+    list.forEach { item ->
+        val primary = borderIndex == 0
+        var lable: String? = null
+        if (primary) {
+            if (showLabel) {
+                lable = getLabel(item)
+            }
+            showLabel = !showLabel
+        }
+
+        items.add(
+            CircularItem(
+                angle = currentAngle,
+                label = lable,
+                primary = primary,
+                value = ItemValue(item),
+            )
+        )
+        addStepIndex()
+        items.add(
+            CircularItem(
+                angle = currentAngle,
+                label = null,
+                primary = false,
+                value = null,
+            )
+        )
+        addStepIndex()
     }
     return items
 }
@@ -117,30 +263,90 @@ fun CameraManualLayer() {
 
         currentCharacteristic.value?.apply {
             focalDistanceRange?.let {
-                AnimatedVisibility(
-                    visible = selectedManualItem.value == ManualControlItem.FocalDistance,
-                    enter = scaleIn(
-                        animationSpec = tween(200),
-                        transformOrigin = TransformOrigin(0.5F, 1F)
-                    ) + fadeIn(),
-                    exit = scaleOut(
-                        animationSpec = tween(200),
-                        transformOrigin = TransformOrigin(0.5F, 1F)
-                    ) + fadeOut(),
-                ) {
-                    val items = remember { getFocalDistanceWheelItems(it.lower, it.upper) }
-                    val circleWheelState =
-                        remember { CircleWheelState(items = items, defaultItem = items.first()) }
-                    LaunchedEffect(circleWheelState.currentItem.value) {
-                        val focalDistance = circleWheelState.currentItem.value?.value
-                        viewModel.captureController.focalDistanceFlow.value =
-                            if (focalDistance == -1F) null else focalDistance
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    val shutterWheelState = remember {
+                        val items = getTypeWheelItems(ShutterSpeedItem.entries) { it.label }
+                        CircleWheelState(
+                            items = items,
+                            defaultItem = items.first()
+                        )
                     }
-                    HalfCircleWheel(
-                        circleWheelState = circleWheelState,
-                        indicatorColor = MaterialTheme.colorScheme.primary,
-                        wheelBackground = actionBackgroundColor,
-                    )
+                    ScaleAnimatedVisibility(
+                        visible = selectedManualItem.value == ManualControlItem.ShutterSpeed,
+                    ) {
+                        LaunchedEffect(shutterWheelState.currentItem.value) {
+                            viewModel.captureController.sensorExposureTimeFlow.value =
+                                shutterWheelState.currentItem.value?.value?.value?.time
+                        }
+                        HalfCircleWheel(
+                            circleWheelState = shutterWheelState,
+                            indicatorColor = MaterialTheme.colorScheme.primary,
+                            wheelBackground = actionBackgroundColor,
+                        )
+                    }
+
+                    val sensitivityWheelState = remember {
+                        val items = getTypeWheelItems(ISO_LIST) { "$it" }
+                        CircleWheelState(
+                            items = items,
+                            defaultItem = items.first()
+                        )
+                    }
+                    ScaleAnimatedVisibility(
+                        visible = selectedManualItem.value == ManualControlItem.Sensitivity,
+                    ) {
+                        LaunchedEffect(sensitivityWheelState.currentItem.value) {
+                            viewModel.captureController.sensorSensitivityFlow.value =
+                                sensitivityWheelState.currentItem.value?.value?.value
+                        }
+                        HalfCircleWheel(
+                            circleWheelState = sensitivityWheelState,
+                            indicatorColor = MaterialTheme.colorScheme.primary,
+                            wheelBackground = actionBackgroundColor,
+                        )
+                    }
+
+                    val focalWheelState = remember {
+                        val items = getFocalDistanceWheelItems(it.lower, it.upper)
+                        CircleWheelState(
+                            items = items,
+                            defaultItem = items.first()
+                        )
+                    }
+                    ScaleAnimatedVisibility(
+                        visible = selectedManualItem.value == ManualControlItem.FocalDistance,
+                    ) {
+                        LaunchedEffect(focalWheelState.currentItem.value) {
+                            viewModel.captureController.focalDistanceFlow.value =
+                                focalWheelState.currentItem.value?.value?.value
+                        }
+                        HalfCircleWheel(
+                            circleWheelState = focalWheelState,
+                            indicatorColor = MaterialTheme.colorScheme.primary,
+                            wheelBackground = actionBackgroundColor,
+                        )
+                    }
+
+                    val temperatureWheelState = remember {
+                        val items = getTemperatureWheelItems()
+                        CircleWheelState(
+                            items = items,
+                            defaultItem = items.first()
+                        )
+                    }
+                    ScaleAnimatedVisibility(
+                        visible = selectedManualItem.value == ManualControlItem.Temperature,
+                    ) {
+                        LaunchedEffect(temperatureWheelState.currentItem.value) {
+                            viewModel.captureController.customTemperatureFlow.value =
+                                temperatureWheelState.currentItem.value?.value?.value
+                        }
+                        HalfCircleWheel(
+                            circleWheelState = temperatureWheelState,
+                            indicatorColor = MaterialTheme.colorScheme.primary,
+                            wheelBackground = actionBackgroundColor,
+                        )
+                    }
                 }
             }
         }
@@ -149,6 +355,7 @@ fun CameraManualLayer() {
             modifier = Modifier
                 .fillMaxWidth()
                 .background(actionBackgroundColor)
+                .padding(horizontal = Layout.padding.pxs)
         ) {
             @Composable
             fun RowButton(
@@ -158,12 +365,17 @@ fun CameraManualLayer() {
                 Column(
                     modifier = Modifier
                         .weight(1F)
+                        .padding(
+                            horizontal = Layout.padding.pxs,
+                            vertical = Layout.padding.pxs,
+                        )
+                        .clip(Layout.roundShape.rs)
                         .clickable {
                             selectedManualItem.value =
                                 if (selectedManualItem.value == manualControlItem) null
                                 else manualControlItem
                         }
-                        .padding(vertical = Layout.padding.ps),
+                        .padding(vertical = Layout.padding.pxs),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     val contentColor =

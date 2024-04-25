@@ -7,6 +7,7 @@ import android.hardware.camera2.CaptureResult
 import android.hardware.camera2.params.MeteringRectangle
 import android.hardware.camera2.params.RggbChannelVector
 import android.os.Build
+import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
@@ -17,16 +18,23 @@ data class FocusRequestTrigger(
     var focusRect: Rect?,
     var focusRequest: Boolean,
     var focusCancel: Boolean,
-    var focusIdle: Boolean,
 )
 
-fun calcTemperature(factor: Int): RggbChannelVector {
+fun calcTemperature(factor: Float): RggbChannelVector {
     return RggbChannelVector(
         0.635f + (0.0208333f * factor),
         1.0f,
         1.0f,
         3.7420394f + (-0.0287829f * factor)
     )
+}
+
+enum class FlashMode {
+    OFF,
+    AUTO,
+    ON,
+    ALWAYS_ON,
+    ;
 }
 
 class CaptureController {
@@ -39,7 +47,7 @@ class CaptureController {
 
     val focalDistanceFlow = MutableStateFlow<Float?>(null)
 
-    val customTemperatureFlow = MutableStateFlow<Int?>(null)
+    val customTemperatureFlow = MutableStateFlow<Float?>(null)
 
     val oisEnableFlow = MutableStateFlow(false)
 
@@ -50,6 +58,8 @@ class CaptureController {
     val currentFaceDetectModeFlow = MutableStateFlow<FaceDetectMode?>(null)
 
     val focusRequestTriggerFlow = MutableStateFlow<FocusRequestTrigger?>(null)
+
+    val flashModeFlow = MutableStateFlow(FlashMode.OFF)
 
     val manualSensorParamsFlow = combine(
         listOf(
@@ -63,6 +73,7 @@ class CaptureController {
             zoomRatioFlow,
             focusRequestTriggerFlow,
             currentFaceDetectModeFlow,
+            flashModeFlow,
         )
     ) { list -> list }
 
@@ -90,7 +101,11 @@ class CaptureController {
         customTemperatureFlow.value = null
     }
 
-    fun setCurrentCaptureParams(builder: CaptureRequest.Builder) {
+    fun setCurrentCaptureParams(
+        preview: Boolean,
+        trigger: Boolean,
+        builder: CaptureRequest.Builder,
+    ) {
         builder.apply {
             val afEnable = runBlocking { afEnableFlow.first() }
             val aeEnable = runBlocking { aeEnableFlow.first() }
@@ -113,7 +128,7 @@ class CaptureController {
             if (aeEnable) {
                 set(
                     CaptureRequest.CONTROL_AE_MODE,
-                    CaptureRequest.CONTROL_AE_MODE_ON
+                    CaptureRequest.CONTROL_AE_MODE_ON,
                 )
                 val aeCompensation = aeCompensationFlow.value
                 set(
@@ -130,6 +145,33 @@ class CaptureController {
                 set(CaptureRequest.SENSOR_EXPOSURE_TIME, sensorExposureTime)
                 set(CaptureRequest.SENSOR_SENSITIVITY, sensorSensitivity)
             }
+
+//            // 处理闪光灯逻辑
+//            val flashMode = flashModeFlow.value
+//            Log.i("TAG", "setCurrentCaptureParams: $flashMode")
+//            if (flashMode == FlashMode.OFF) {
+//                set(
+//                    CaptureRequest.FLASH_MODE,
+//                    CaptureRequest.FLASH_MODE_OFF,
+//                )
+//            } else if (flashMode == FlashMode.ALWAYS_ON) {
+//                set(
+//                    CaptureRequest.FLASH_MODE,
+//                    CaptureRequest.FLA  SH_MODE_TORCH,
+//                )
+//            } else if (flashMode == FlashMode.ON) {
+//                set(
+//                    CaptureRequest.FLASH_MODE,
+//                    CaptureRequest.FLASH_MODE_SINGLE,
+//                )
+//            } else if (flashMode == FlashMode.AUTO) {
+//
+//            }
+
+//            set(
+//                CaptureRequest.CONTROL_AE_MODE,
+//                CaptureRequest.CONTROL_AE_MODE_ON_AUTO_FLASH,
+//            )
 
             if (awbEnable) {
                 set(
@@ -179,49 +221,40 @@ class CaptureController {
                 )
             }
 
+            Log.i(
+                "TAG",
+                "setCurrentCaptureParams: focusRequestTriggerFlow ${focusRequestTriggerFlow.value}"
+            )
             focusRequestTriggerFlow.value?.apply {
                 if (focusRequest && focusRect != null) {
                     val meteringRectangle =
                         MeteringRectangle(focusRect, MeteringRectangle.METERING_WEIGHT_MAX)
-
                     set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO)
                     set(CaptureRequest.CONTROL_AF_REGIONS, arrayOf(meteringRectangle))
-                    set(
-                        CaptureRequest.CONTROL_AF_TRIGGER,
-                        CameraMetadata.CONTROL_AF_TRIGGER_START
-                    )
-
                     set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
                     set(CaptureRequest.CONTROL_AE_REGIONS, arrayOf(meteringRectangle))
-                    set(
-                        CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER,
-                        CameraMetadata.CONTROL_AE_PRECAPTURE_TRIGGER_START
-                    )
-                    focusRequest = false
+                    if (trigger) {
+                        set(
+                            CaptureRequest.CONTROL_AF_TRIGGER,
+                            CameraMetadata.CONTROL_AF_TRIGGER_START
+                        )
+                        set(
+                            CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER,
+                            CameraMetadata.CONTROL_AE_PRECAPTURE_TRIGGER_START
+                        )
+                    }
                 }
                 if (focusCancel) {
-                    set(
-                        CaptureRequest.CONTROL_AF_TRIGGER,
-                        CameraMetadata.CONTROL_AF_TRIGGER_CANCEL
-                    )
-                    set(CaptureRequest.CONTROL_AF_REGIONS, null)
-                    set(
-                        CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER,
-                        CameraMetadata.CONTROL_AE_PRECAPTURE_TRIGGER_CANCEL
-                    )
-                    set(CaptureRequest.CONTROL_AE_REGIONS, null)
-                }
-                if (focusIdle) {
-                    set(
-                        CaptureRequest.CONTROL_AF_TRIGGER,
-                        CameraMetadata.CONTROL_AF_TRIGGER_IDLE
-                    )
-                    set(CaptureRequest.CONTROL_AF_REGIONS, null)
-                    set(
-                        CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER,
-                        CameraMetadata.CONTROL_AE_PRECAPTURE_TRIGGER_IDLE
-                    )
-                    set(CaptureRequest.CONTROL_AE_REGIONS, null)
+                    if (trigger) {
+                        set(
+                            CaptureRequest.CONTROL_AF_TRIGGER,
+                            CameraMetadata.CONTROL_AF_TRIGGER_CANCEL
+                        )
+                        set(
+                            CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER,
+                            CameraMetadata.CONTROL_AE_PRECAPTURE_TRIGGER_CANCEL
+                        )
+                    }
                 }
             }
         }
@@ -232,7 +265,6 @@ class CaptureController {
             focusRect = rect,
             focusRequest = true,
             focusCancel = false,
-            focusIdle = false,
         )
     }
 
@@ -241,16 +273,6 @@ class CaptureController {
             focusRect = null,
             focusRequest = false,
             focusCancel = true,
-            focusIdle = false,
-        )
-    }
-
-    fun focusIdle() {
-        focusRequestTriggerFlow.value = FocusRequestTrigger(
-            focusRect = null,
-            focusRequest = false,
-            focusCancel = false,
-            focusIdle = true,
         )
     }
 
