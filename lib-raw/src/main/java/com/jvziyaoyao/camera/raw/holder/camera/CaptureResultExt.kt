@@ -1,6 +1,7 @@
 package com.jvziyaoyao.camera.raw.holder.camera
 
 import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CaptureRequest
 import android.hardware.camera2.CaptureResult
 import android.hardware.camera2.params.Face
 import android.hardware.camera2.params.MeteringRectangle
@@ -131,3 +132,28 @@ val CaptureResult.awbRegions: Array<MeteringRectangle>?
 
 val CaptureResult.faceDetectResult: Array<Face>?
     get() = get(CaptureResult.STATISTICS_FACES)
+
+val CaptureResult.is3AComplete: Boolean
+    get() {
+        var afStateOK = false
+        var aeStateOK = false
+        var awbStateOK = false
+        if (
+            afState == CaptureRequest.CONTROL_AF_STATE_FOCUSED_LOCKED
+            || afState == CaptureRequest.CONTROL_AF_STATE_NOT_FOCUSED_LOCKED
+        ) {
+            afStateOK = true
+        }
+        if (
+            aeState == CaptureRequest.CONTROL_AE_STATE_CONVERGED
+            || aeState == CaptureRequest.CONTROL_AE_STATE_FLASH_REQUIRED
+        ) {
+            aeStateOK = true
+        }
+        if (
+            awbState == CaptureRequest.CONTROL_AWB_STATE_CONVERGED
+        ) {
+            awbStateOK = true
+        }
+        return afStateOK && aeStateOK && awbStateOK
+    }

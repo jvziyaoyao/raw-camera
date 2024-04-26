@@ -8,6 +8,7 @@ import android.hardware.camera2.CameraCaptureSession
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager
+import android.hardware.camera2.CameraMetadata
 import android.hardware.camera2.CaptureRequest
 import android.hardware.camera2.CaptureResult
 import android.hardware.camera2.TotalCaptureResult
@@ -37,6 +38,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.launch
 import org.opencv.android.OpenCVLoader
 import org.opencv.core.Core
@@ -134,30 +137,19 @@ class CameraFlow(
         OpenCVLoader.initLocal()
     }
 
-//    suspend fun runFlashAE() {
-//        val previewSurface = surfaceFlow.value ?: return
-//        if (cameraCaptureSessionFlow.value == null) return
-//        val cameraDevice = cameraDeviceFlow.value ?: return
-//        val cameraCaptureRequest =
-//            cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
-//                .apply {
-//                    addTarget(previewSurface)
-//                    setCurrentCaptureParams(false, this)
-//                    set(
-//                        CaptureRequest.FLASH_MODE,
-//                        CaptureRequest.FLASH_MODE_SINGLE,
-//                    )
-//                    set(
-//                        CaptureRequest.CONTROL_AE_MODE,
-//                        CaptureRequest.CONTROL_AE_MODE_ON_ALWAYS_FLASH,
-//                    )
-//                }.build()
-//        val captureResult =
-//            cameraCaptureSessionFlow.value?.captureAsync(cameraCaptureRequest, handler)
-//        Log.i(TAG, "runFlashAE: captureResult $captureResult")
-//    }
-
     suspend fun capture(
+        outputFile: File? = null,
+        additionalRotation: Int? = null,
+    ) {
+        val captureResult = captureResultFlow.value
+        val flashLight = flashLightFlow.first()
+        if (captureResult?.is3AComplete != true && flashLight) {
+            focusRequestAsync(null)
+        }
+        internalCapture(outputFile, additionalRotation)
+    }
+
+    private suspend fun internalCapture(
         outputFile: File? = null,
         additionalRotation: Int? = null,
     ) {
@@ -252,6 +244,7 @@ class CameraFlow(
             result: TotalCaptureResult
         ) {
             super.onCaptureCompleted(session, request, result)
+            captureRequestFlow.value = request
             captureResultFlow.value = result
         }
     }
@@ -485,6 +478,7 @@ class CameraFlow(
                     val previewSurface = surfaceFlow.value
                     val focusRequestTrigger = captureController.focusRequestTriggerFlow.value
                     if (cameraCaptureSession != null && cameraDevice != null && previewSurface != null) {
+                        Log.i(TAG, "setupCamera: $focusRequestTrigger")
                         if (focusRequestTrigger?.focusRequest == true) {
                             val captureRequest =
                                 cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
@@ -711,7 +705,7 @@ class CameraFlow(
 
     val currentOutputItemFlow = MutableStateFlow<OutputItem?>(null)
 
-    val allPermissionGrantedFlow = MutableStateFlow(false)
+    private val allPermissionGrantedFlow = MutableStateFlow(false)
 
     fun onPermissionChanged(allGranted: Boolean) {
         allPermissionGrantedFlow.value = allGranted
@@ -741,6 +735,8 @@ class CameraFlow(
      *
      */
 
+    val captureRequestFlow = MutableStateFlow<CaptureRequest?>(null)
+
     val captureResultFlow = MutableStateFlow<CaptureResult?>(null)
 
     private fun fetchCurrentSupportedOutput(cameraCharacteristics: CameraCharacteristics) {
@@ -767,27 +763,59 @@ class CameraFlow(
 
     val captureController = CaptureController()
 
+    val flashLightFlow = combine(
+        captureResultFlow,
+        captureController.flashModeFlow,
+    ) { captureResult, flashMode ->
+        val requiredFlash = captureResult?.aeState == CameraMetadata.CONTROL_AE_STATE_FLASH_REQUIRED
+        flashMode == FlashMode.ON
+                || flashMode == FlashMode.ALWAYS_ON
+                || (flashMode == FlashMode.AUTO && requiredFlash)
+    }
+
     private fun setCurrentCaptureParams(
         preview: Boolean,
         trigger: Boolean,
         builder: CaptureRequest.Builder
     ) = captureController.setCurrentCaptureParams(preview, trigger, builder)
 
-    fun focusRequest(rect: Rect) {
-        val cameraPair = currentCameraPairFlow.value
-        val characteristics = cameraPair?.second
-        val flipHorizontal = characteristics?.isFrontCamera == true
-        val sensorSize = characteristics?.sensorSize
-        if (sensorSize != null) {
-            val focusRect = composeRect2SensorRect(
-                rect = rect,
-                rotationOrientation = rotationOrientation.value,
-                flipHorizontal = flipHorizontal,
-                sensorWidth = sensorSize.width(),
-                sensorHeight = sensorSize.height(),
-            )
-            captureController.focusRequest(focusRect)
+    fun focusRequest(rect: Rect?) {
+        val focusRect = if (rect == null) null else {
+            val cameraPair = currentCameraPairFlow.value
+            val characteristics = cameraPair?.second
+            val flipHorizontal = characteristics?.isFrontCamera == true
+            val sensorSize = characteristics?.sensorSize
+            if (sensorSize == null) null else {
+                composeRect2SensorRect(
+                    rect = rect,
+                    rotationOrientation = rotationOrientation.value,
+                    flipHorizontal = flipHorizontal,
+                    sensorWidth = sensorSize.width(),
+                    sensorHeight = sensorSize.height(),
+                )
+            }
         }
+        captureController.focusRequest(focusRect)
+    }
+
+    suspend fun focusRequestAsync(rect: Rect?) {
+        captureController.tag = "${System.currentTimeMillis()}"
+        focusRequest(rect)
+        var complete = false
+        var isMyRequest = false
+        captureResultFlow
+            .takeWhile { !complete }
+            .collectLatest {
+                val currentIsMyRequest = captureRequestFlow.value?.tag == captureController.tag
+                if (currentIsMyRequest) {
+                    isMyRequest = true
+                    if (it?.is3AComplete == true) {
+                        complete = true
+                    }
+                } else if (isMyRequest) {
+                    complete = true
+                }
+            }
     }
 
     fun focusCancel() {

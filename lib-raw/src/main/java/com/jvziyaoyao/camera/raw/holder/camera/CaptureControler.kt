@@ -39,6 +39,8 @@ enum class FlashMode {
 
 class CaptureController {
 
+    var tag: String? = null
+
     val aeCompensationFlow = MutableStateFlow(0)
 
     val sensorSensitivityFlow = MutableStateFlow<Int?>(null)
@@ -111,6 +113,18 @@ class CaptureController {
             val aeEnable = runBlocking { aeEnableFlow.first() }
             val awbEnable = runBlocking { awbEnableFlow.first() }
 
+            if (tag != null) setTag(tag)
+
+            val flashMode = flashModeFlow.value
+            if (
+                flashMode == FlashMode.ALWAYS_ON
+            ) {
+                set(
+                    CaptureRequest.FLASH_MODE,
+                    CaptureRequest.FLASH_MODE_TORCH
+                )
+            }
+
             if (afEnable) {
                 set(
                     CaptureRequest.CONTROL_AF_MODE,
@@ -125,6 +139,7 @@ class CaptureController {
                 set(CaptureRequest.LENS_FOCUS_DISTANCE, focalDistance)
             }
 
+
             if (aeEnable) {
                 set(
                     CaptureRequest.CONTROL_AE_MODE,
@@ -135,6 +150,18 @@ class CaptureController {
                     CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION,
                     aeCompensation
                 )
+
+                if (flashMode == FlashMode.ON) {
+                    set(
+                        CaptureRequest.CONTROL_AE_MODE,
+                        CaptureRequest.CONTROL_AE_MODE_ON_ALWAYS_FLASH,
+                    )
+                } else if (flashMode == FlashMode.AUTO) {
+                    set(
+                        CaptureRequest.CONTROL_AE_MODE,
+                        CaptureRequest.CONTROL_AE_MODE_ON_AUTO_FLASH,
+                    )
+                }
             } else {
                 set(
                     CaptureRequest.CONTROL_AE_MODE,
@@ -145,33 +172,6 @@ class CaptureController {
                 set(CaptureRequest.SENSOR_EXPOSURE_TIME, sensorExposureTime)
                 set(CaptureRequest.SENSOR_SENSITIVITY, sensorSensitivity)
             }
-
-//            // 处理闪光灯逻辑
-//            val flashMode = flashModeFlow.value
-//            Log.i("TAG", "setCurrentCaptureParams: $flashMode")
-//            if (flashMode == FlashMode.OFF) {
-//                set(
-//                    CaptureRequest.FLASH_MODE,
-//                    CaptureRequest.FLASH_MODE_OFF,
-//                )
-//            } else if (flashMode == FlashMode.ALWAYS_ON) {
-//                set(
-//                    CaptureRequest.FLASH_MODE,
-//                    CaptureRequest.FLA  SH_MODE_TORCH,
-//                )
-//            } else if (flashMode == FlashMode.ON) {
-//                set(
-//                    CaptureRequest.FLASH_MODE,
-//                    CaptureRequest.FLASH_MODE_SINGLE,
-//                )
-//            } else if (flashMode == FlashMode.AUTO) {
-//
-//            }
-
-//            set(
-//                CaptureRequest.CONTROL_AE_MODE,
-//                CaptureRequest.CONTROL_AE_MODE_ON_AUTO_FLASH,
-//            )
 
             if (awbEnable) {
                 set(
@@ -191,7 +191,6 @@ class CaptureController {
                 )
                 set(CaptureRequest.COLOR_CORRECTION_GAINS, rggbChannelVector)
             }
-
 
             val currentSceneMode = currentSceneModeFlow.value
             if (currentSceneMode != null) {
@@ -226,13 +225,15 @@ class CaptureController {
                 "setCurrentCaptureParams: focusRequestTriggerFlow ${focusRequestTriggerFlow.value}"
             )
             focusRequestTriggerFlow.value?.apply {
-                if (focusRequest && focusRect != null) {
-                    val meteringRectangle =
-                        MeteringRectangle(focusRect, MeteringRectangle.METERING_WEIGHT_MAX)
+                if (focusRequest) {
+                    if (focusRect != null) {
+                        val meteringRectangle =
+                            MeteringRectangle(focusRect, MeteringRectangle.METERING_WEIGHT_MAX)
+                        set(CaptureRequest.CONTROL_AF_REGIONS, arrayOf(meteringRectangle))
+                        set(CaptureRequest.CONTROL_AE_REGIONS, arrayOf(meteringRectangle))
+                        set(CaptureRequest.CONTROL_AWB_REGIONS, arrayOf(meteringRectangle))
+                    }
                     set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO)
-                    set(CaptureRequest.CONTROL_AF_REGIONS, arrayOf(meteringRectangle))
-                    set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
-                    set(CaptureRequest.CONTROL_AE_REGIONS, arrayOf(meteringRectangle))
                     if (trigger) {
                         set(
                             CaptureRequest.CONTROL_AF_TRIGGER,
@@ -260,7 +261,7 @@ class CaptureController {
         }
     }
 
-    fun focusRequest(rect: Rect) {
+    fun focusRequest(rect: Rect?) {
         focusRequestTriggerFlow.value = FocusRequestTrigger(
             focusRect = rect,
             focusRequest = true,

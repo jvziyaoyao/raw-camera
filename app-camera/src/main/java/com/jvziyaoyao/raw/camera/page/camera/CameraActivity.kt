@@ -3,7 +3,6 @@ package com.jvziyaoyao.raw.camera.page.camera
 import android.opengl.GLSurfaceView
 import android.os.Build
 import android.os.Bundle
-import android.util.Log
 import android.view.Surface
 import android.view.ViewGroup
 import android.widget.FrameLayout
@@ -11,10 +10,10 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandIn
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -42,7 +41,10 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.FlashAuto
+import androidx.compose.material.icons.filled.FlashOff
+import androidx.compose.material.icons.filled.FlashOn
+import androidx.compose.material.icons.filled.FlashlightOn
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.ripple.rememberRipple
@@ -50,7 +52,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
-import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -59,23 +60,23 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.jvziyaoyao.camera.raw.holder.camera.FlashMode
 import com.jvziyaoyao.camera.raw.holder.camera.cameraRequirePermissions
 import com.jvziyaoyao.camera.raw.holder.camera.defaultSensorAspectRatio
 import com.jvziyaoyao.camera.raw.holder.camera.sensorAspectRatio
@@ -88,7 +89,6 @@ import com.jvziyaoyao.raw.camera.base.animateRotationAsState
 import com.jvziyaoyao.raw.camera.page.wheel.LocalVibratorHelper
 import com.jvziyaoyao.raw.camera.page.wheel.VibratorHelper
 import com.jvziyaoyao.raw.camera.ui.theme.Layout
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.androidx.viewmodel.ext.android.viewModel
@@ -193,24 +193,114 @@ fun CameraBody() {
     }
 }
 
+enum class FlashLightMode(
+    val flashMode: FlashMode,
+    val icon: ImageVector,
+) {
+    OFF(
+        flashMode = FlashMode.OFF,
+        icon = Icons.Filled.FlashOff,
+    ),
+    AUTO(
+        flashMode = FlashMode.AUTO,
+        icon = Icons.Filled.FlashAuto,
+    ),
+    ON(
+        flashMode = FlashMode.ON,
+        icon = Icons.Filled.FlashOn,
+    ),
+    ALWAYS_ON(
+        flashMode = FlashMode.ALWAYS_ON,
+        icon = Icons.Filled.FlashlightOn,
+    ),
+    ;
+}
+
+val FlashMode.flashLightMode: FlashLightMode
+    get() {
+        for (entry in FlashLightMode.entries) {
+            if (entry.flashMode == this) return entry
+        }
+        throw RuntimeException("闪光灯模式不合法！")
+    }
+
 @Composable
 fun CameraActionHeader() {
     val viewModel: CameraViewModel = koinViewModel()
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(Layout.padding.pxs)
-    ) {
-        IconButton(
-            modifier = Modifier.align(Alignment.CenterEnd),
-            onClick = {
-                viewModel.showSetting()
-            },
+    Box(modifier = Modifier.fillMaxWidth()) {
+        val showFlashOption = remember { mutableStateOf(false) }
+        val flashMode = viewModel.captureController.flashModeFlow.collectAsState()
+        AnimatedVisibility(
+            visible = !showFlashOption.value,
+            enter = fadeIn(),
+            exit = fadeOut(),
         ) {
-            Icon(
-                imageVector = Icons.Filled.Menu,
-                contentDescription = null
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(Layout.padding.pxs)
+            ) {
+                IconButton(
+                    modifier = Modifier.align(Alignment.CenterStart),
+                    onClick = {
+                        showFlashOption.value = true
+                    },
+                ) {
+                    val flashLightMode = flashMode.value.flashLightMode
+                    Icon(
+                        imageVector = flashLightMode.icon,
+                        tint = if (flashLightMode != FlashLightMode.OFF) MaterialTheme.colorScheme.primary
+                        else LocalContentColor.current,
+                        contentDescription = null
+                    )
+                }
+                IconButton(
+                    modifier = Modifier.align(Alignment.CenterEnd),
+                    onClick = {
+                        viewModel.showSetting()
+                    },
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Menu,
+                        contentDescription = null
+                    )
+                }
+            }
+        }
+
+        AnimatedVisibility(
+            visible = showFlashOption.value,
+            enter = expandIn { IntSize(0, it.height) } + fadeIn(),
+            exit = shrinkOut { IntSize(0, it.height) } + fadeOut(),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        vertical = Layout.padding.pxs,
+                        horizontal = Layout.padding.pxl,
+                    )
+                    .align(Alignment.Center),
+                horizontalArrangement = Arrangement.SpaceAround,
+            ) {
+                FlashLightMode.entries.forEach { flashLightMode ->
+                    IconButton(
+                        onClick = {
+                            viewModel.captureController.flashModeFlow.value =
+                                flashLightMode.flashMode
+                            showFlashOption.value = false
+                        },
+                    ) {
+                        val color = if (flashMode.value == flashLightMode.flashMode)
+                            MaterialTheme.colorScheme.primary else LocalContentColor.current
+                        Icon(
+                            tint = color,
+                            imageVector = flashLightMode.icon,
+                            contentDescription = null
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -437,7 +527,7 @@ fun CameraPreviewLayer(
 fun CameraCaptureInfoLayer() {
     val viewModel: CameraViewModel = koinViewModel()
     val currentOutputItem = viewModel.currentOutputItemFlow.collectAsState()
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .padding(Layout.padding.ps)
@@ -448,43 +538,43 @@ fun CameraCaptureInfoLayer() {
             val backgroundColor = MaterialTheme.colorScheme.onBackground.copy(0.4F)
             val lineColor = MaterialTheme.colorScheme.background.copy(0.6F)
 
-            CompositionLocalProvider(LocalContentColor provides lineColor) {
-                currentOutputItem.value?.apply {
-                    Column(
-                        modifier = Modifier
-                            .clip(Layout.roundShape.rs)
-                            .background(backgroundColor)
-                            .clickable {
-                                viewModel.showSetting()
-                            }
-                            .padding(
-                                horizontal = Layout.padding.ps,
-                                vertical = Layout.padding.pxs,
-                            )
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                text = outputMode.label,
-                                color = LocalContentColor.current,
-                                fontSize = Layout.fontSize.fs,
-                            )
-                            Spacer(modifier = Modifier.width(Layout.padding.pxxs))
-                            Icon(
-                                modifier = Modifier.size(12.dp),
-                                imageVector = Icons.Filled.ArrowDropDown,
-                                contentDescription = null
-                            )
-                        }
-                        Text(
-                            text = "${bestSize.width}x${bestSize.height}",
-                            fontSize = Layout.fontSize.fxxs,
-                            color = LocalContentColor.current.copy(0.6F),
-                        )
-                    }
-                }
-            }
+//            CompositionLocalProvider(LocalContentColor provides lineColor) {
+//                currentOutputItem.value?.apply {
+//                    Column(
+//                        modifier = Modifier
+//                            .clip(Layout.roundShape.rs)
+//                            .background(backgroundColor)
+//                            .clickable {
+//                                viewModel.showSetting()
+//                            }
+//                            .padding(
+//                                horizontal = Layout.padding.ps,
+//                                vertical = Layout.padding.pxs,
+//                            )
+//                    ) {
+//                        Row(
+//                            verticalAlignment = Alignment.CenterVertically,
+//                        ) {
+//                            Text(
+//                                text = outputMode.label,
+//                                color = LocalContentColor.current,
+//                                fontSize = Layout.fontSize.fs,
+//                            )
+//                            Spacer(modifier = Modifier.width(Layout.padding.pxxs))
+//                            Icon(
+//                                modifier = Modifier.size(12.dp),
+//                                imageVector = Icons.Filled.ArrowDropDown,
+//                                contentDescription = null
+//                            )
+//                        }
+//                        Text(
+//                            text = "${bestSize.width}x${bestSize.height}",
+//                            fontSize = Layout.fontSize.fxxs,
+//                            color = LocalContentColor.current.copy(0.6F),
+//                        )
+//                    }
+//                }
+//            }
             Spacer(modifier = Modifier.weight(1F))
 
             val exposureHistogramData = viewModel.exposureHistogramDataFlow.collectAsState()
@@ -494,8 +584,8 @@ fun CameraCaptureInfoLayer() {
                         .clip(Layout.roundShape.rs)
                         .background(backgroundColor)
                         .padding(Layout.padding.ps)
-                        .width(100.dp)
-                        .height(50.dp),
+                        .width(80.dp)
+                        .height(40.dp),
                     onDraw = {
                         val histData = exposureHistogramData.value!!
                         val histSize = histData.size
@@ -517,6 +607,31 @@ fun CameraCaptureInfoLayer() {
                             prevY = y
                         }
                     }
+                )
+            }
+        }
+
+        val flashLight = viewModel.flashLightFlow.collectAsState(initial = false)
+        AnimatedVisibility(
+            modifier = Modifier.align(Alignment.TopCenter),
+            visible = flashLight.value,
+            enter = fadeIn(),
+            exit = fadeOut(),
+        ) {
+            Box(
+                modifier = Modifier
+                    .clip(Layout.roundShape.rs)
+                    .background(MaterialTheme.colorScheme.primary)
+                    .padding(
+                        horizontal = Layout.padding.pm,
+                        vertical = Layout.padding.pxxs,
+                    ),
+            ) {
+                Icon(
+                    modifier = Modifier.size(18.dp),
+                    imageVector = Icons.Filled.FlashOn,
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                    contentDescription = null
                 )
             }
         }

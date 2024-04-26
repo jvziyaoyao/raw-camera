@@ -8,14 +8,11 @@ import android.os.Environment
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.geometry.Rect
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import com.jvziyaoyao.camera.raw.holder.camera.CameraFlow
 import com.jvziyaoyao.camera.raw.holder.camera.off.getGLFilterBitmapAsync
 import com.jvziyaoyao.camera.raw.holder.sensor.SensorFlow
 import com.jvziyaoyao.raw.sample.R
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.launch
 import java.io.File
 
 enum class CaptureMode() {
@@ -116,6 +113,9 @@ class CameraRawViewModel : ViewModel() {
     val captureController
         get() = cameraFlow.captureController
 
+    val flashLightFlow
+        get() = cameraFlow.flashLightFlow
+
     val captureResultFlow
         get() = cameraFlow.captureResultFlow
 
@@ -198,6 +198,16 @@ class CameraRawViewModel : ViewModel() {
         )
         focusPointRectFlow.value = rect
         cameraFlow.focusRequest(rect)
+    }
+
+    suspend fun focusRequestAsync(rect: Rect) {
+        focusRequestOrientation.value = FocusRequestOrientation(
+            pitch = pitchFlow.value,
+            roll = rollFlow.value,
+            yaw = yawFlow.value,
+        )
+        focusPointRectFlow.value = rect
+        cameraFlow.focusRequestAsync(rect)
     }
 
     fun resumeCamera() = cameraFlow.onResume()

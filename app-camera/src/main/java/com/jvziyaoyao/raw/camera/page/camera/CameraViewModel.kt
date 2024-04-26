@@ -3,14 +3,8 @@ package com.jvziyaoyao.raw.camera.page.camera
 import android.hardware.camera2.CameraMetadata
 import android.opengl.GLSurfaceView
 import android.os.Environment
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CenterFocusWeak
-import androidx.compose.material.icons.filled.SportsHandball
-import androidx.compose.material.icons.filled.Texture
-import androidx.compose.material.icons.filled.WbIncandescent
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.ViewModel
 import com.jvziyaoyao.camera.raw.holder.camera.CameraFlow
 import com.jvziyaoyao.camera.raw.holder.camera.chooseDefaultCameraPair
@@ -84,6 +78,9 @@ class CameraViewModel : ViewModel() {
 
     val captureController
         get() = cameraFlow.captureController
+
+    val flashLightFlow
+        get() = cameraFlow.flashLightFlow
 
     val captureResultFlow
         get() = cameraFlow.captureResultFlow

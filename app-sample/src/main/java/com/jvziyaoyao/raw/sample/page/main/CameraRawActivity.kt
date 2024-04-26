@@ -46,6 +46,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -69,10 +70,10 @@ import com.jvziyaoyao.camera.raw.holder.camera.SceneMode
 import com.jvziyaoyao.camera.raw.holder.camera.aeCompensationRange
 import com.jvziyaoyao.camera.raw.holder.camera.aeRegions
 import com.jvziyaoyao.camera.raw.holder.camera.aeState
-import com.jvziyaoyao.camera.raw.holder.camera.afMode
 import com.jvziyaoyao.camera.raw.holder.camera.afRegions
 import com.jvziyaoyao.camera.raw.holder.camera.afState
-import com.jvziyaoyao.camera.raw.holder.camera.afTrigger
+import com.jvziyaoyao.camera.raw.holder.camera.awbRegions
+import com.jvziyaoyao.camera.raw.holder.camera.awbState
 import com.jvziyaoyao.camera.raw.holder.camera.cameraManager
 import com.jvziyaoyao.camera.raw.holder.camera.cameraRequirePermissions
 import com.jvziyaoyao.camera.raw.holder.camera.defaultSensorAspectRatio
@@ -83,7 +84,6 @@ import com.jvziyaoyao.camera.raw.holder.camera.focalDistanceRange
 import com.jvziyaoyao.camera.raw.holder.camera.getFingerPointRect
 import com.jvziyaoyao.camera.raw.holder.camera.isFrontCamera
 import com.jvziyaoyao.camera.raw.holder.camera.oisAvailable
-import com.jvziyaoyao.camera.raw.holder.camera.oisEnable
 import com.jvziyaoyao.camera.raw.holder.camera.outputSupportedMode
 import com.jvziyaoyao.camera.raw.holder.camera.rectFromNormalized
 import com.jvziyaoyao.camera.raw.holder.camera.rectNormalized
@@ -101,12 +101,9 @@ import com.jvziyaoyao.raw.sample.ui.base.CommonPermissions
 import com.jvziyaoyao.raw.sample.ui.base.animateRotationAsState
 import com.jvziyaoyao.raw.sample.ui.theme.Layout
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.androidx.viewmodel.ext.android.viewModel
@@ -160,56 +157,37 @@ class CameraRawActivity : ComponentActivity(), CoroutineScope by MainScope() {
             }
         }
 
-//        launch {
+//        // 监听传感器角度变化
+//        launch(Dispatchers.IO) {
 //            combine(
-//                mViewModel.captureController.focusRequestTriggerFlow,
-//                mViewModel.captureResultFlow,
-//            ) { t01, t02 ->
-//                arrayOf(t01, t02)
+//                mViewModel.pitchFlow,
+//                mViewModel.rollFlow,
+//                mViewModel.yawFlow,
+//            ) { t01, t02, t03 ->
+//                arrayOf(t01, t02, t03)
 //            }.collectLatest {
-//                val focusRequestTrigger = mViewModel.captureController.focusRequestTriggerFlow.value
-//                val captureResult = mViewModel.captureResultFlow.value
-//                if (focusRequestTrigger != null && !focusRequestTrigger.focusCancel) {
-//                    if (captureResult != null) {
-//                        if (captureResult.afState == CameraMetadata.CONTROL_AF_STATE_FOCUSED_LOCKED
-//                            || captureResult.afState == CameraMetadata.CONTROL_AF_STATE_NOT_FOCUSED_LOCKED
-//                        ) {
-//                            mViewModel.focusCancel()
-//                        }
+//                val currentPitch = mViewModel.pitchFlow.value
+//                val currentRoll = mViewModel.rollFlow.value
+//                val currentYaw = mViewModel.yawFlow.value
+//                val srcOrientation = mViewModel.focusRequestOrientation.value
+//                val focusRequestTrigger = mViewModel.focusRequestTriggerFlow.value
+//                srcOrientation?.apply {
+//                    val delta = 10F
+//                    val delay = 1000 * 2 // 两秒内不要取消
+//                    val isOrientationChanged = ((currentPitch - pitch).absoluteValue > delta
+//                            || (currentRoll - roll).absoluteValue > delta
+//                            || (currentYaw - yaw).absoluteValue > delta)
+//                    if (
+//                        (System.currentTimeMillis() - timestamp > delay)
+//                        && isOrientationChanged
+//                        && focusRequestTrigger?.focusCancel != true
+//                    ) {
+//                        mViewModel.focusRequestOrientation.value = null
+//                        mViewModel.focusCancel()
 //                    }
 //                }
 //            }
 //        }
-
-        // 监听传感器角度变化
-        launch(Dispatchers.IO) {
-            combine(
-                mViewModel.pitchFlow,
-                mViewModel.rollFlow,
-                mViewModel.yawFlow,
-            ) { t01, t02, t03 ->
-                arrayOf(t01, t02, t03)
-            }.collectLatest {
-                val currentPitch = mViewModel.pitchFlow.value
-                val currentRoll = mViewModel.rollFlow.value
-                val currentYaw = mViewModel.yawFlow.value
-                val srcOrientation = mViewModel.focusRequestOrientation.value
-                val focusRequestTrigger = mViewModel.focusRequestTriggerFlow.value
-                srcOrientation?.apply {
-                    val delta = 10F
-                    val delay = 1000 * 2 // 两秒内不要取消
-                    if (
-                        (System.currentTimeMillis() - timestamp > delay)
-                        && ((currentPitch - pitch).absoluteValue > delta
-                                || (currentRoll - roll).absoluteValue > delta
-                                || (currentYaw - yaw).absoluteValue > delta)
-                        && focusRequestTrigger?.focusCancel != true
-                    ) {
-                        mViewModel.focusCancel()
-                    }
-                }
-            }
-        }
 
         launch {
             mViewModel.currentCameraPairFlow.collectLatest {
@@ -279,6 +257,7 @@ fun CameraRawBody(
 fun CameraRawPreviewLayer(
     onGLSurfaceView: (GLSurfaceView) -> Unit,
 ) {
+    val scope = rememberCoroutineScope()
     val viewModel: CameraRawViewModel = koinViewModel()
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val portrait = maxHeight > maxWidth
@@ -318,33 +297,41 @@ fun CameraRawPreviewLayer(
             val previewSize = remember { mutableStateOf(IntSize.Zero) }
             val fingerClick = remember { mutableStateOf(Offset.Zero) }
             val fingerRect = remember { mutableStateOf(Rect.Zero) }
+            val focusLoading = remember { mutableStateOf(false) }
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .pointerInput(Unit) {
                         detectTapGestures {
-                            fingerClick.value = it
-                            val previewWidth = previewSize.value.width.toFloat()
-                            val previewHeight = previewSize.value.height.toFloat()
-                            val fingerSize = 100F
-                            val rect = getFingerPointRect(
-                                it.x,
-                                it.y,
-                                previewWidth,
-                                previewHeight,
-                                fingerSize
-                            )
-                            fingerRect.value = rect
-                            val normalizedRect = rectNormalized(rect, previewWidth, previewHeight)
-                            viewModel.focusRequest(normalizedRect)
+                            scope.launch {
+                                focusLoading.value = true
+                                fingerClick.value = it
+                                val previewWidth = previewSize.value.width.toFloat()
+                                val previewHeight = previewSize.value.height.toFloat()
+                                val fingerSize = 160F
+                                val rect = getFingerPointRect(
+                                    it.x,
+                                    it.y,
+                                    previewWidth,
+                                    previewHeight,
+                                    fingerSize
+                                )
+                                fingerRect.value = rect
+                                val normalizedRect =
+                                    rectNormalized(rect, previewWidth, previewHeight)
+//                            viewModel.focusRequest(normalizedRect)
+                                viewModel.focusRequestAsync(normalizedRect)
+                                focusLoading.value = false
+                            }
                         }
                     }
                     .onSizeChanged {
                         previewSize.value = it
                     }
             ) {
+
                 if (cameraCharacteristics != null) {
-                    val focusRequestTrigger = viewModel.focusRequestTriggerFlow.collectAsState()
+                    val focusRequestOrientation = viewModel.focusRequestOrientation
                     val focusPointRect = viewModel.focusPointRectFlow.collectAsState()
                     val captureResult = viewModel.captureResultFlow.collectAsState()
                     val sensorSize = cameraCharacteristics.sensorSize
@@ -353,18 +340,25 @@ fun CameraRawPreviewLayer(
                         val sensorHeight = sensorSize.height()
                         Canvas(modifier = Modifier.fillMaxSize()) {
                             focusPointRect.value?.let { fPointRect ->
-                                val pointRect =
-                                    rectFromNormalized(fPointRect, size.width, size.height)
-                                val color =
-                                    if (focusRequestTrigger.value?.focusCancel == true) {
-                                        Color.White
-                                    } else Color.Cyan
-                                drawRect(
-                                    color = color,
-                                    topLeft = pointRect.topLeft,
-                                    size = pointRect.size,
-                                    style = Stroke(width = 10F)
-                                )
+                                if (focusRequestOrientation.value != null) {
+                                    val pointRect =
+                                        rectFromNormalized(fPointRect, size.width, size.height)
+                                    val color = Color.White
+                                    drawRect(
+                                        color = color,
+                                        topLeft = pointRect.topLeft,
+                                        size = pointRect.size,
+                                        style = Stroke(width = 12F)
+                                    )
+                                    if (focusLoading.value) {
+                                        drawRect(
+                                            color = color,
+                                            topLeft = pointRect.topLeft,
+                                            size = pointRect.size.div(3F),
+                                        )
+                                    }
+                                }
+
                             }
 
                             captureResult.value?.apply {
@@ -427,6 +421,34 @@ fun CameraRawPreviewLayer(
                                         ),
                                     )
                                 }
+                                awbRegions?.forEach { meteringRectangle ->
+                                    val rect = sensorDetectRect2ComposeRect(
+                                        rect = meteringRectangle.rect,
+                                        rotationOrientation = viewModel.rotationOrientation.value,
+                                        flipHorizontal = cameraCharacteristics.isFrontCamera,
+                                        size = size,
+                                        sensorWidth = sensorWidth,
+                                        sensorHeight = sensorHeight,
+                                    )
+                                    drawRect(
+                                        color = Color.Red,
+                                        topLeft = rect.topLeft,
+                                        size = rect.size,
+                                        style = Stroke(width = 4F)
+                                    )
+                                    val circleSize = 16F
+                                    drawCircle(
+                                        color = when (awbState) {
+                                            CameraMetadata.CONTROL_AWB_STATE_CONVERGED -> Color.Green
+                                            else -> Color.Gray
+                                        },
+                                        radius = circleSize,
+                                        center = Offset(
+                                            x = rect.right + circleSize,
+                                            y = rect.top + rect.height.div(2),
+                                        ),
+                                    )
+                                }
                                 faceDetectResult?.forEach {
                                     val faceRect = sensorDetectRect2ComposeRect(
                                         rect = it.bounds,
@@ -465,6 +487,7 @@ fun CameraRawInfoLayer() {
                     MaterialTheme.colorScheme.surface.copy(0.6F)
                 )
                 .padding(Layout.padding.pm)
+                .animateContentSize(),
         ) {
             Text(
                 text = "${viewModel.captureFrameRate.value}-${viewModel.rendererFrameRate.value}",
@@ -477,11 +500,11 @@ fun CameraRawInfoLayer() {
             Text(text = "感光度：${captureResult.value?.sensorSensitivity}")
             Text(text = "电子变焦：${captureResult.value?.zoomRatio}")
             Text(text = "场景模式：${SceneMode.getByCode(captureResult.value?.sceneMode ?: -1)}")
-            Text(text = "OIS：${captureResult.value?.oisEnable}")
-            Text(text = "AFMode：${captureResult.value?.afMode}")
-            Text(text = "AFState：${captureResult.value?.afState}")
-            Text(text = "AFTrigger：${captureResult.value?.afTrigger}")
-            Text(text = "AEState：${captureResult.value?.aeState}")
+
+            val flashLight = viewModel.flashLightFlow.collectAsState(initial = false)
+            if (flashLight.value) {
+                Text(text = "有闪光灯")
+            }
         }
 
         Column(
@@ -555,6 +578,15 @@ fun CameraRawActionLayer(
                 .padding(Layout.padding.pm)
                 .align(Alignment.BottomCenter)
         ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Button(onClick = {
+                    viewModel.focusRequestOrientation.value = null
+                    viewModel.focusCancel()
+                }) {
+                    Text(text = "取消对焦")
+                }
+            }
+
             val currentCamera = viewModel.currentCameraPairFlow.collectAsState()
             val cameraList = viewModel.cameraPairListFlow.collectAsState()
             Row(verticalAlignment = Alignment.CenterVertically) {

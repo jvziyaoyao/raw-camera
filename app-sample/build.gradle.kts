@@ -71,7 +71,7 @@ dependencies {
     implementation("com.google.accompanist:accompanist-webview:$accompanist_version")
 
     // CameraX
-    val camerax_version = "1.3.3"
+    val camerax_version = "1.4.0-alpha05"
     implementation("androidx.camera:camera-camera2:$camerax_version")
     implementation("androidx.camera:camera-lifecycle:$camerax_version")
     implementation("androidx.camera:camera-video:$camerax_version")
