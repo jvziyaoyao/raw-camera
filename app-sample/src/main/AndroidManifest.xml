@@ -70,6 +70,18 @@
             android:screenOrientation="portrait"
             android:theme="@style/Theme.RawSample"
             tools:ignore="LockedOrientationActivity">
+<!--            <intent-filter>-->
+<!--                <action android:name="android.intent.action.MAIN" />-->
+
+<!--                <category android:name="android.intent.category.LAUNCHER" />-->
+<!--            </intent-filter>-->
+        </activity>
+        <activity
+            android:name="com.jvziyaoyao.raw.sample.page.hdr.HdrActivity"
+            android:exported="true"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.RawSample"
+            tools:ignore="LockedOrientationActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 

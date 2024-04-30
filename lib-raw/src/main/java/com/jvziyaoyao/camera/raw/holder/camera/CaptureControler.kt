@@ -37,6 +37,10 @@ enum class FlashMode {
     ;
 }
 
+const val ONE_SECOND = 1000 * 1000 * 1000L
+
+const val MAX_PREVIEW_SHUTTER_SPEED = ONE_SECOND.div(16).toLong()
+
 class CaptureController {
 
     var tag: String? = null
@@ -168,9 +172,20 @@ class CaptureController {
                     CaptureRequest.CONTROL_AE_MODE_OFF
                 )
                 val sensorSensitivity = sensorSensitivityFlow.value
-                val sensorExposureTime = sensorExposureTimeFlow.value
-                set(CaptureRequest.SENSOR_EXPOSURE_TIME, sensorExposureTime)
                 set(CaptureRequest.SENSOR_SENSITIVITY, sensorSensitivity)
+
+                // 限制预览的最大曝光时间
+                var sensorExposureTime = sensorExposureTimeFlow.value
+                if (preview && sensorExposureTime != null) {
+                    if (sensorExposureTime > MAX_PREVIEW_SHUTTER_SPEED) {
+                        sensorExposureTime = MAX_PREVIEW_SHUTTER_SPEED
+                    }
+                }
+                Log.i(
+                    "TAG",
+                    "setCurrentCaptureParams: sensorExposureTime $sensorExposureTime ~ ${sensorExposureTimeFlow.value}"
+                )
+                set(CaptureRequest.SENSOR_EXPOSURE_TIME, sensorExposureTime)
             }
 
             if (awbEnable) {

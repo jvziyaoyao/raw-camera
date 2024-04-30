@@ -52,6 +52,13 @@ android {
 dependencies {
     implementation(project(":lib-raw"))
 
+    implementation("com.github.jvziyaoyao:ImageViewer:feat-zoomable-SNAPSHOT")
+//    implementation("com.github.jvziyaoyao:ImageViewer:1.0.2-alpha.8")
+
+    implementation("io.coil-kt:coil:2.4.0")
+    implementation("io.coil-kt:coil-svg:2.4.0")
+    implementation("io.coil-kt:coil-compose:2.4.0")
+
     // https://mvnrepository.com/artifact/androidx.compose.material/material-icons-extended
     implementation("androidx.compose.material:material-icons-extended:1.7.0-alpha06")
 

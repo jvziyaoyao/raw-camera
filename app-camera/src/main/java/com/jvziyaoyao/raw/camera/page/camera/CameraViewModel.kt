@@ -1,8 +1,11 @@
 package com.jvziyaoyao.raw.camera.page.camera
 
 import android.hardware.camera2.CameraMetadata
+import android.media.ExifInterface
 import android.opengl.GLSurfaceView
 import android.os.Environment
+import android.util.Log
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.geometry.Rect
 import androidx.lifecycle.ViewModel
@@ -12,6 +15,7 @@ import com.jvziyaoyao.camera.raw.holder.camera.isFrontCamera
 import com.jvziyaoyao.camera.raw.holder.sensor.SensorFlow
 import kotlinx.coroutines.flow.map
 import java.io.File
+import java.io.FileInputStream
 
 enum class PictureMode(
     val label: String,
@@ -150,6 +154,8 @@ class CameraViewModel : ViewModel() {
             outputFile,
             additionalRotation = saveImageOrientation.value,
         )
+        // 刷新图片
+        fetchImages()
     }
 
     fun focusCancel() = cameraFlow.focusCancel()
@@ -200,6 +206,21 @@ class CameraViewModel : ViewModel() {
                 currentCameraPairFlow.value = nextCameraPair
             }
         }
+    }
+
+    /**
+     *
+     * 图片预览相关
+     *
+     */
+
+    val imagesFileList = mutableStateListOf<File>()
+
+    fun fetchImages() {
+        val yaoDirectory = getStoragePath()
+        val fileList = yaoDirectory.listFiles()?.toList()?.reversed() ?: emptyList()
+        imagesFileList.clear()
+        imagesFileList.addAll(fileList)
     }
 
 }

@@ -16,6 +16,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -71,6 +72,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntSize
@@ -86,9 +88,15 @@ import com.jvziyaoyao.raw.camera.base.DynamicStatusBarColor
 import com.jvziyaoyao.raw.camera.base.FadeAnimatedVisibility
 import com.jvziyaoyao.raw.camera.base.ScaleAnimatedVisibility
 import com.jvziyaoyao.raw.camera.base.animateRotationAsState
+import com.jvziyaoyao.raw.camera.base.rememberCoilImagePainter
 import com.jvziyaoyao.raw.camera.page.wheel.LocalVibratorHelper
 import com.jvziyaoyao.raw.camera.page.wheel.VibratorHelper
 import com.jvziyaoyao.raw.camera.ui.theme.Layout
+import com.jvziyaoyao.zoomable.previewer.PreviewerState
+import com.jvziyaoyao.zoomable.previewer.TransformItemView
+import com.jvziyaoyao.zoomable.previewer.VerticalDragType
+import com.jvziyaoyao.zoomable.previewer.rememberPreviewerState
+import com.jvziyaoyao.zoomable.previewer.rememberTransformItemState
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.androidx.viewmodel.ext.android.viewModel
@@ -129,6 +137,11 @@ class CameraActivity : BaseActivity() {
                 }
             }
         }
+
+        // 刷新图片列表
+        launch {
+            mViewModel.fetchImages()
+        }
     }
 
     override fun onResume() {
@@ -149,6 +162,13 @@ class CameraActivity : BaseActivity() {
 fun CameraBody() {
     val viewModel: CameraViewModel = koinViewModel()
     CameraPopup()
+
+    val images = viewModel.imagesFileList
+    val previewerState = rememberPreviewerState(
+        verticalDragType = VerticalDragType.Down,
+        pageCount = { images.size },
+        getKey = { images[it].absolutePath },
+    )
 
     Column(
         modifier = Modifier
@@ -186,11 +206,13 @@ fun CameraBody() {
                 .fillMaxWidth()
                 .weight(1F)
         ) {
-            CameraActionFooter()
+            CameraActionFooter(previewerState)
         }
 
         Spacer(modifier = Modifier.navigationBarsPadding())
     }
+
+    CameraPreviewer(images = images, previewerState = previewerState)
 }
 
 enum class FlashLightMode(
@@ -306,7 +328,9 @@ fun CameraActionHeader() {
 }
 
 @Composable
-fun CameraActionFooter() {
+fun CameraActionFooter(
+    previewerState: PreviewerState,
+) {
     val scope = rememberCoroutineScope()
     val viewModel: CameraViewModel = koinViewModel()
     Column(
@@ -372,9 +396,32 @@ fun CameraActionFooter() {
             )
             SideCircleWrap(
                 onClick = {
-
+                    scope.launch {
+                        previewerState.enterTransform(0)
+                    }
                 }
-            ) {}
+            ) {
+                viewModel.imagesFileList.apply {
+                    if (isNotEmpty()) {
+                        val imageFile = first()
+                        val painter = rememberCoilImagePainter(image = imageFile)
+                        val itemState =
+                            rememberTransformItemState(intrinsicSize = painter.intrinsicSize)
+                        TransformItemView(
+                            key = imageFile.absolutePath,
+                            itemState = itemState,
+                            transformState = previewerState,
+                        ) {
+                            Image(
+                                modifier = Modifier.fillMaxSize(),
+                                painter = painter,
+                                contentScale = ContentScale.Crop,
+                                contentDescription = null,
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
