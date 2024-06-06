@@ -21,7 +21,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -41,6 +40,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FlashAuto
 import androidx.compose.material.icons.filled.FlashOff
@@ -48,7 +48,6 @@ import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.FlashlightOn
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material.ripple.rememberRipple
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -413,7 +412,14 @@ fun CameraActionFooter(
                             transformState = previewerState,
                         ) {
                             Image(
-                                modifier = Modifier.fillMaxSize(),
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(
+                                        RoundedCornerShape(
+                                            (1 - previewerState.decorationAlpha.value)
+                                                .times(100).dp
+                                        )
+                                    ),
                                 painter = painter,
                                 contentScale = ContentScale.Crop,
                                 contentDescription = null,
@@ -472,8 +478,9 @@ fun CameraCaptureButton(
                 .background(color = MaterialTheme.colorScheme.onBackground)
                 .clickable(
                     enabled = !loading,
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = rememberRipple(color = MaterialTheme.colorScheme.primary)
+                    // TODO 寻找其他解决方案
+//                    interactionSource = remember { MutableInteractionSource() },
+//                    indication = ripple(color = MaterialTheme.colorScheme.primary)
                 ) {
                     onClick()
                 }

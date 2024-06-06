@@ -5,7 +5,6 @@ import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
-import androidx.activity.ComponentActivity
 import androidx.compose.runtime.compositionLocalOf
 import com.jvziyaoyao.camera.raw.util.ContextUtil
 
@@ -21,7 +20,7 @@ class VibratorHelper(
             context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
         vibratorManager.defaultVibrator
     } else {
-        context.getSystemService(ComponentActivity.VIBRATOR_SERVICE) as Vibrator
+        context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
     }
 
     fun playTickVibrate() {
