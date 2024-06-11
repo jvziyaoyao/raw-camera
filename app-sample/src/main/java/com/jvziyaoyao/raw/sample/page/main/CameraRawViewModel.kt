@@ -5,14 +5,23 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.opengl.GLSurfaceView
 import android.os.Environment
+import android.os.Handler
+import android.os.HandlerThread
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.geometry.Rect
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.jvziyaoyao.camera.raw.holder.camera.CameraFlow
+import com.jvziyaoyao.camera.raw.holder.camera.isFrontCamera
 import com.jvziyaoyao.camera.raw.holder.camera.off.getGLFilterBitmapAsync
+import com.jvziyaoyao.camera.raw.holder.camera.render.YuvCameraPreviewer
+import com.jvziyaoyao.camera.raw.holder.camera.render.YuvCameraRenderer
 import com.jvziyaoyao.camera.raw.holder.sensor.SensorFlow
 import com.jvziyaoyao.raw.sample.R
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.launch
 import java.io.File
 
 enum class CaptureMode() {
@@ -97,7 +106,15 @@ class CameraRawViewModel : ViewModel() {
      *
      */
 
+    private val handlerThread = HandlerThread("CameraHandlerThread").apply { start() }
+
+    private val handler = Handler(handlerThread.looper)
+
     private lateinit var cameraFlow: CameraFlow
+
+    private lateinit var cameraRenderer: YuvCameraRenderer
+
+    private lateinit var cameraPreviewer: YuvCameraPreviewer
 
     val currentCameraPairFlow
         get() = cameraFlow.currentCameraPairFlow
@@ -122,24 +139,24 @@ class CameraRawViewModel : ViewModel() {
     // 画面渲染
 
     val exposureHistogramDataFlow
-        get() = cameraFlow.exposureHistogramDataFlow
+        get() = cameraRenderer.exposureHistogramDataFlow
 
     val focusPeakingEnableFlow
-        get() = cameraFlow.focusPeakingEnableFlow
+        get() = cameraRenderer.focusPeakingEnableFlow
 
     val brightnessPeakingEnableFlow
-        get() = cameraFlow.brightnessPeakingEnableFlow
+        get() = cameraRenderer.brightnessPeakingEnableFlow
 
     val exposureHistogramEnableFlow
-        get() = cameraFlow.exposureHistogramEnableFlow
+        get() = cameraRenderer.exposureHistogramEnableFlow
 
     // 性能相关
 
     val captureFrameRate
-        get() = cameraFlow.captureFrameRate
+        get() = cameraRenderer.captureFrameRate
 
     val rendererFrameRate
-        get() = cameraFlow.rendererFrameRate
+        get() = cameraRenderer.rendererFrameRate
 
     // 屏幕旋转
 
@@ -162,15 +179,41 @@ class CameraRawViewModel : ViewModel() {
     fun setupCamera(
         displayRotation: Int,
     ) {
-        cameraFlow = CameraFlow(displayRotation = displayRotation)
+        cameraRenderer = YuvCameraRenderer()
+        cameraPreviewer = YuvCameraPreviewer { image ->
+            cameraRenderer.processImage(image)
+        }
+        cameraFlow = CameraFlow(
+            handler = handler,
+            displayRotation = displayRotation,
+            getPreviewSurface = { cameraCharacteristics ->
+                cameraPreviewer.getPreviewSurface(cameraCharacteristics, handler)
+            }
+        )
+
         cameraFlow.setupCamera()
+        cameraRenderer.setupRenderer()
+
+        viewModelScope.launch {
+            combine(rotationOrientation, currentCameraPairFlow) { p0, p1 ->
+                Pair(p0, p1)
+            }.collectLatest { pair ->
+                val rotationOrientation = pair.first
+                val currentCameraPairFlow = pair.second
+                if (currentCameraPairFlow != null) {
+                    val isFrontCamera = currentCameraPairFlow.second.isFrontCamera
+                    cameraRenderer.upDateVertex(isFrontCamera, rotationOrientation)
+                }
+            }
+        }
     }
 
     fun releaseCamera() {
-        cameraFlow.releaseCamera()
+        cameraFlow.release()
+        cameraRenderer.release()
     }
 
-    fun setSurfaceView(glSurfaceView: GLSurfaceView) = cameraFlow.setSurfaceView(glSurfaceView)
+    fun setSurfaceView(glSurfaceView: GLSurfaceView) = cameraRenderer.setSurfaceView(glSurfaceView)
 
     suspend fun onCapture() {
         val outputItem = cameraFlow.currentOutputItemFlow.value ?: return
@@ -210,9 +253,15 @@ class CameraRawViewModel : ViewModel() {
         cameraFlow.focusRequestAsync(rect)
     }
 
-    fun resumeCamera() = cameraFlow.onResume()
+    fun resumeCamera() {
+        cameraFlow.resume()
+        cameraRenderer.resume()
+    }
 
-    fun pauseCamera() = cameraFlow.onPause()
+    fun pauseCamera() {
+        cameraFlow.pause()
+        cameraRenderer.pause()
+    }
 
     /**
      *

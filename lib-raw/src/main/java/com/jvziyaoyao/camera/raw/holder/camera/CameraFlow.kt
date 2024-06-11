@@ -14,39 +14,28 @@ import android.hardware.camera2.CaptureResult
 import android.hardware.camera2.TotalCaptureResult
 import android.media.Image
 import android.media.ImageReader
-import android.opengl.GLSurfaceView
 import android.os.Build
 import android.os.Environment
 import android.os.Handler
-import android.os.HandlerThread
 import android.util.Log
 import android.view.Surface
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.geometry.Rect
 import androidx.exifinterface.media.ExifInterface
 import com.jvziyaoyao.camera.raw.util.ContextUtil
-import com.jvziyaoyao.camera.raw.util.testTime
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.launch
-import org.opencv.android.OpenCVLoader
-import org.opencv.core.Core
-import org.opencv.core.CvType
-import org.opencv.core.Mat
 import java.io.File
-import java.nio.ByteBuffer
 import java.util.concurrent.Executors
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
@@ -92,8 +81,10 @@ val cameraRequirePermissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.
 }
 
 class CameraFlow(
+    private val handler: Handler,
     val displayRotation: Int = 0,
     val provideSaveFile: ProvideSaveFile = defaultProvideSaveFile,
+    val getPreviewSurface: (CameraCharacteristics) -> Surface? = { null },
 ) : CoroutineScope by MainScope() {
 
     private val TAG = CameraFlow::class.java.name
@@ -106,36 +97,11 @@ class CameraFlow(
 
     private var cameraCaptureSessionFlow = MutableStateFlow<CameraCaptureSession?>(null)
 
-    private var glSurfaceViewFlow = MutableStateFlow<GLSurfaceView?>(null)
-
     private var surfaceFlow = MutableStateFlow<Surface?>(null)
-
-    private val cameraSurfaceRender = CameraSurfaceRenderer(TEX_VERTEX_MAT_0)
 
     private var imageOutputReader: ImageReader? = null
 
-    private var imagePreviewReader: ImageReader? = null
-
-    private val handlerThread = HandlerThread("CameraHandlerThread").apply { start() }
-
-    private val handler = Handler(handlerThread.looper)
-
     private val executor = Executors.newSingleThreadExecutor()
-
-    private var frameCount = 0
-
-    private val yuvDataFlow = MutableStateFlow<YUVRenderData?>(null)
-
-    private val grayMatFlow = MutableStateFlow<Mat?>(null)
-
-    private val focusPeakingMatFlow = MutableStateFlow<Mat?>(null)
-
-    private val brightnessPeakingMatFlow = MutableStateFlow<Mat?>(null)
-
-    init {
-        // 初始化OpenCV
-        OpenCVLoader.initLocal()
-    }
 
     suspend fun capture(
         outputFile: File? = null,
@@ -231,12 +197,6 @@ class CameraFlow(
         }, handler)
     }
 
-    fun setSurfaceView(glSurfaceView: GLSurfaceView) {
-        glSurfaceViewFlow.value = glSurfaceView
-        glSurfaceView.setEGLContextClientVersion(3)
-        glSurfaceView.setRenderer(cameraSurfaceRender)
-    }
-
     private val previewCaptureCallback = object : CameraCaptureSession.CaptureCallback() {
         override fun onCaptureCompleted(
             session: CameraCaptureSession,
@@ -263,16 +223,6 @@ class CameraFlow(
                 (sensorOrientation - displayRotation + 360) % 360
             }
             rotationOrientation.value = rotationOrientationResult
-            var nextTextureVertex = when (rotationOrientationResult) {
-                0 -> TEX_VERTEX_MAT_0
-                90 -> TEX_VERTEX_MAT_90
-                180 -> TEX_VERTEX_MAT_180
-                270 -> TEX_VERTEX_MAT_270
-                else -> TEX_VERTEX_MAT_90
-            }
-            if (isFrontCamera) nextTextureVertex = vertexHorizontalFlip(nextTextureVertex)
-            cameraSurfaceRender.currentYuvData = null
-            cameraSurfaceRender.updateTextureBuffer(nextTextureVertex)
         }
     }
 
@@ -281,8 +231,6 @@ class CameraFlow(
         cameraCharacteristics: CameraCharacteristics,
         outputItem: OutputItem?,
     ) {
-        val scaleStreamConfigurationMap = cameraCharacteristics.scaleStreamMap
-        val sensorAspectRatio = cameraCharacteristics.sensorAspectRatio
         val surfaceList = mutableListOf<Surface>()
 
         if (outputItem != null) {
@@ -296,63 +244,12 @@ class CameraFlow(
             surfaceList.add(imageOutputReader!!.surface)
         }
 
-        val outputSizeList = scaleStreamConfigurationMap?.getOutputSizes(ImageFormat.YUV_420_888)
-        val bestPreviewSize = outputSizeList?.run {
-            val aspectList = getSizeByAspectRatio(this, sensorAspectRatio)
-            return@run findBestSize(aspectList.toTypedArray(), 1280)
-        }
-        if (bestPreviewSize != null) {
-            Log.i(TAG, "startPreview: bestPreviewSize $bestPreviewSize")
-            imagePreviewReader?.close()
-            imagePreviewReader = ImageReader.newInstance(
-                bestPreviewSize.width,
-                bestPreviewSize.height,
-                ImageFormat.YUV_420_888,
-                2
-            )
-            imagePreviewReader!!.setOnImageAvailableListener(previewImageAvailableListener, handler)
-            surfaceFlow.value = imagePreviewReader!!.surface
-            surfaceList.add(imagePreviewReader!!.surface)
+        getPreviewSurface(cameraCharacteristics)?.let {
+            surfaceFlow.value = it
+            surfaceList.add(it)
         }
 
         cameraCaptureSessionFlow.value = cameraDevice.createCameraSessionAsync(handler, surfaceList)
-    }
-
-    private val previewImageAvailableListener = object : ImageReader.OnImageAvailableListener {
-        override fun onImageAvailable(reader: ImageReader?) {
-            val image = reader?.acquireNextImage() ?: return
-            frameCount++
-            val width = image.width
-            val height = image.height
-            val plans = image.planes
-            val y = plans[0].buffer
-            val u = plans[1].buffer
-            val v = plans[2].buffer
-            y.position(0)
-            u.position(0)
-            v.position(0)
-
-            val yByteBuffer = ByteBuffer.allocateDirect(y.capacity())
-            val uByteBuffer = ByteBuffer.allocateDirect(u.capacity())
-            val vByteBuffer = ByteBuffer.allocateDirect(v.capacity())
-            yByteBuffer.put(y)
-            uByteBuffer.put(u)
-            vByteBuffer.put(v)
-            yByteBuffer.position(0)
-            uByteBuffer.position(0)
-            vByteBuffer.position(0)
-
-            grayMatFlow.value = Mat(height, width, CvType.CV_8UC1, yByteBuffer)
-            yByteBuffer.position(0)
-            yuvDataFlow.value = YUVRenderData(
-                width = width,
-                height = height,
-                yByteArray = yByteBuffer,
-                uByteArray = uByteBuffer,
-                vByteArray = vByteBuffer,
-            )
-            image.close()
-        }
     }
 
     @SuppressLint("MissingPermission")
@@ -560,123 +457,17 @@ class CameraFlow(
             }
         }
 
-        // 计算帧率
-        launch(Dispatchers.IO) {
-            var job: Job? = null
-            resumeTimestampFlow.collectLatest {
-                launch {
-                    val resumeTimestamp = resumeTimestampFlow.value
-                    if (resumeTimestamp != null) {
-                        job?.cancel()
-                        job = launch(Dispatchers.IO) {
-                            var currentCount = frameCount
-                            var currentRenderCount = cameraSurfaceRender.frameCount
-                            while (resumeTimestampFlow.value != null) {
-                                delay(1000)
-                                Log.i(
-                                    TAG,
-                                    "onCreate: calc frame 计算帧率： $frameCount - ${cameraSurfaceRender.frameCount}"
-                                )
-                                captureFrameRate.value = frameCount - currentCount
-                                rendererFrameRate.value =
-                                    cameraSurfaceRender.frameCount - currentRenderCount
-                                currentCount = frameCount
-                                currentRenderCount = cameraSurfaceRender.frameCount
-                            }
-                        }
-                    } else {
-                        job = null
-                    }
-                }
-            }
-        }
-
-        // 填充预览yuv数据
-        launch(Dispatchers.IO) {
-            yuvDataFlow.collectLatest {
-                cameraSurfaceRender.currentYuvData = it
-            }
-        }
-
-        // 填充直方图数据
-        launch(Dispatchers.IO) {
-            combine(grayMatFlow, exposureHistogramEnableFlow) { t01, t02 ->
-                arrayOf(t01, t02)
-            }.collectLatest {
-                val grayMat = grayMatFlow.value
-                val histogram = exposureHistogramEnableFlow.value
-                exposureHistogramDataFlow.value =
-                    if (histogram && grayMat != null) getHistogramData(grayMat) else null
-            }
-        }
-
-        // 填充峰值亮度数据
-        launch(Dispatchers.IO) {
-            val zebraOffsetArr = arrayOf(0).toIntArray()
-            combine(grayMatFlow, brightnessPeakingEnableFlow) { t01, t02 ->
-                arrayOf(t01, t02)
-            }.collectLatest {
-                val grayMat = grayMatFlow.value
-                val enable = brightnessPeakingEnableFlow.value
-                brightnessPeakingMatFlow.value =
-                    if (grayMat != null && enable) markOverExposedRegions(
-                        zebraOffsetArr,
-                        grayMat
-                    ) else null
-            }
-        }
-
-        // 填充峰值对焦数据
-        launch(Dispatchers.IO) {
-            combine(grayMatFlow, focusPeakingEnableFlow) { t01, t02 ->
-                arrayOf(t01, t02)
-            }.collectLatest {
-                val time = testTime {
-                    val grayMat = grayMatFlow.value
-                    val enable = focusPeakingEnableFlow.value
-                    focusPeakingMatFlow.value =
-                        if (grayMat != null && enable) {
-                            markShapeImageRegions(grayMat)
-                                .apply { preMultiplyAlpha() }
-                        } else null
-                }
-//                Log.i(TAG, "onCreate: focusPeakingMat time -> $time")
-            }
-        }
-
-        // 附加图层合并填充
-        launch(Dispatchers.IO) {
-            combine(brightnessPeakingMatFlow, focusPeakingMatFlow) { t01, t02 ->
-                arrayOf(t01, t02)
-            }.collectLatest {
-                val brightnessPeakingMat = brightnessPeakingMatFlow.value
-                val focusPeakingMat = focusPeakingMatFlow.value
-                cameraSurfaceRender.currentAdditionalMat =
-                    if (brightnessPeakingMat != null && focusPeakingMat != null) {
-                        Mat(brightnessPeakingMat.size(), CvType.CV_8UC4).apply {
-                            Core.addWeighted(
-                                brightnessPeakingMat,
-                                1.0,
-                                focusPeakingMat,
-                                1.0,
-                                0.0,
-                                this
-                            )
-                        }
-                    } else brightnessPeakingMat ?: focusPeakingMat
-            }
-        }
     }
 
-    fun releaseCamera() {
+    fun release() {
         cancel()
     }
 
-    fun onResume() {
+    fun resume() {
         resumeTimestampFlow.value = System.currentTimeMillis()
     }
 
-    fun onPause() {
+    fun pause() {
         Log.i(TAG, "onPause: ~")
         resumeTimestampFlow.value = null
     }
@@ -695,7 +486,7 @@ class CameraFlow(
 
     private val resumeTimestampFlow = MutableStateFlow<Long?>(null)
 
-    val rotationOrientation = mutableStateOf(0)
+    val rotationOrientation = MutableStateFlow(0)
 
     val cameraPairListFlow =
         MutableStateFlow(emptyList<Pair<String, CameraCharacteristics>>())
@@ -710,24 +501,6 @@ class CameraFlow(
     fun onPermissionChanged(allGranted: Boolean) {
         allPermissionGrantedFlow.value = allGranted
     }
-
-    /**
-     *
-     *
-     *
-     */
-
-    val captureFrameRate = mutableStateOf(0)
-
-    val rendererFrameRate = mutableStateOf(0)
-
-    val focusPeakingEnableFlow = MutableStateFlow(false)
-
-    val brightnessPeakingEnableFlow = MutableStateFlow(false)
-
-    val exposureHistogramEnableFlow = MutableStateFlow(true)
-
-    val exposureHistogramDataFlow = MutableStateFlow<FloatArray?>(null)
 
     /**
      *
