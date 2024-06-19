@@ -16,6 +16,7 @@ import com.jvziyaoyao.camera.raw.holder.camera.isFrontCamera
 import com.jvziyaoyao.camera.raw.holder.camera.render.YuvCameraPreviewer
 import com.jvziyaoyao.camera.raw.holder.camera.render.YuvCameraRenderer
 import com.jvziyaoyao.camera.raw.holder.sensor.SensorFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
@@ -154,8 +155,8 @@ class CameraViewModel : ViewModel() {
         cameraFlow = CameraFlow(
             handler = handler,
             displayRotation = displayRotation,
-            getPreviewSurface = { cameraCharacteristics ->
-                cameraPreviewer.getPreviewSurface(cameraCharacteristics, handler)
+            getPreviewSurface = { size ->
+                cameraPreviewer.getPreviewSurface(size, handler)
             }
         )
 
@@ -163,14 +164,27 @@ class CameraViewModel : ViewModel() {
         cameraRenderer.setupRenderer()
 
         viewModelScope.launch {
-            combine(rotationOrientation, currentCameraPairFlow) { p0, p1 ->
-                Pair(p0, p1)
-            }.collectLatest { pair ->
+            combine(
+                rotationOrientation,
+                // 等相机启动有画面了再设置顶点
+                cameraFlow.cameraDeviceFlow,
+            ) { p0, p1 -> Pair(p0, p1) }.collectLatest { pair ->
                 val rotationOrientation = pair.first
-                val currentCameraPairFlow = pair.second
-                if (currentCameraPairFlow != null) {
-                    val isFrontCamera = currentCameraPairFlow.second.isFrontCamera
+                val currentCameraPair = cameraFlow.currentCameraPairFlow.value
+                if (currentCameraPair != null) {
+                    val isFrontCamera = currentCameraPair.second.isFrontCamera
                     cameraRenderer.upDateVertex(isFrontCamera, rotationOrientation)
+                }
+            }
+        }
+
+        // 控制Camera启停
+        viewModelScope.launch {
+            previewerVisibleTarget.collectLatest { v ->
+                if (v == true) {
+                    pauseCamera()
+                } else if (v == false) {
+                    resumeCamera()
                 }
             }
         }
@@ -257,6 +271,8 @@ class CameraViewModel : ViewModel() {
      * 图片预览相关
      *
      */
+
+    val previewerVisibleTarget = MutableStateFlow<Boolean?>(false)
 
     val imagesFileList = mutableStateListOf<File>()
 

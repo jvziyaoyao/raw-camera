@@ -13,9 +13,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.graphics.Color
 import com.jvziyaoyao.raw.camera.base.rememberCoilImagePainter
-import com.jvziyaoyao.zoomable.previewer.Previewer
-import com.jvziyaoyao.zoomable.previewer.PreviewerState
-import com.jvziyaoyao.zoomable.previewer.TransformLayerScope
+import com.jvziyaoyao.scale.zoomable.previewer.Previewer
+import com.jvziyaoyao.scale.zoomable.previewer.PreviewerState
+import com.jvziyaoyao.scale.zoomable.previewer.TransformLayerScope
 import kotlinx.coroutines.launch
 import java.io.File
 

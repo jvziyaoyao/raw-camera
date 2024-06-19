@@ -18,6 +18,7 @@ import android.os.Build
 import android.os.Environment
 import android.os.Handler
 import android.util.Log
+import android.util.Size
 import android.view.Surface
 import androidx.compose.ui.geometry.Rect
 import androidx.exifinterface.media.ExifInterface
@@ -84,7 +85,7 @@ class CameraFlow(
     private val handler: Handler,
     val displayRotation: Int = 0,
     val provideSaveFile: ProvideSaveFile = defaultProvideSaveFile,
-    val getPreviewSurface: (CameraCharacteristics) -> Surface? = { null },
+    val getPreviewSurface: (Size) -> Surface? = { null },
 ) : CoroutineScope by MainScope() {
 
     private val TAG = CameraFlow::class.java.name
@@ -93,8 +94,6 @@ class CameraFlow(
 
     private val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
 
-    private var cameraDeviceFlow = MutableStateFlow<CameraDevice?>(null)
-
     private var cameraCaptureSessionFlow = MutableStateFlow<CameraCaptureSession?>(null)
 
     private var surfaceFlow = MutableStateFlow<Surface?>(null)
@@ -102,6 +101,8 @@ class CameraFlow(
     private var imageOutputReader: ImageReader? = null
 
     private val executor = Executors.newSingleThreadExecutor()
+
+    val cameraDeviceFlow = MutableStateFlow<CameraDevice?>(null)
 
     suspend fun capture(
         outputFile: File? = null,
@@ -228,7 +229,7 @@ class CameraFlow(
 
     private suspend fun startPreview(
         cameraDevice: CameraDevice,
-        cameraCharacteristics: CameraCharacteristics,
+        previewSize: Size,
         outputItem: OutputItem?,
     ) {
         val surfaceList = mutableListOf<Surface>()
@@ -244,7 +245,7 @@ class CameraFlow(
             surfaceList.add(imageOutputReader!!.surface)
         }
 
-        getPreviewSurface(cameraCharacteristics)?.let {
+        getPreviewSurface(previewSize)?.let {
             surfaceFlow.value = it
             surfaceList.add(it)
         }
@@ -335,24 +336,34 @@ class CameraFlow(
         launch(Dispatchers.IO) {
             combine(
                 cameraDeviceFlow,
+                currentPreviewSizeFlow,
                 currentOutputItemFlow,
                 currentCameraPairFlow,
-            ) { t0, t1, t2 ->
-                Triple(t0, t1, t2)
+            ) { t0, t1, t2, t3 ->
+                arrayOf(t0, t1, t2, t3)
             }.collectLatest { t ->
-                val cameraDevice = t.first
-                val currentOutputItem = t.second
-                val cameraPair = t.third
-                val cameraCharacteristics = cameraPair?.second
+                val cameraDevice = t[0] as CameraDevice?
+                var previewSize = t[1] as Size?
+                val currentOutputItem = t[2] as OutputItem?
+                val cameraPair = t[3] as CameraPair?
                 val cameraId = cameraPair?.first
+                val cameraCharacteristics = cameraPair?.second
+                if (
+                    previewSize == null
+                    && cameraCharacteristics != null
+                ) {
+                    previewSize = chooseDefaultPreviewSize(
+                        cameraCharacteristics = cameraCharacteristics,
+                    )
+                }
                 if (
                     cameraDevice != null
-                    && cameraCharacteristics != null
+                    && previewSize != null
                     && cameraId == cameraDevice.id
                 ) {
                     startPreview(
                         cameraDevice,
-                        cameraCharacteristics,
+                        previewSize,
                         currentOutputItem,
                     )
                 }
@@ -495,6 +506,8 @@ class CameraFlow(
     val currentCameraPairFlow = MutableStateFlow<Pair<String, CameraCharacteristics>?>(null)
 
     val currentOutputItemFlow = MutableStateFlow<OutputItem?>(null)
+
+    val currentPreviewSizeFlow = MutableStateFlow<Size?>(null)
 
     private val allPermissionGrantedFlow = MutableStateFlow(false)
 

@@ -3,6 +3,7 @@ package com.jvziyaoyao.camera.raw.holder.camera
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.ImageFormat
 import android.graphics.Matrix
 import android.hardware.camera2.CameraCaptureSession
 import android.hardware.camera2.CameraCharacteristics
@@ -207,6 +208,21 @@ fun chooseDefaultCameraPair(
     return if (frontCameraList.isNotEmpty()) {
         frontCameraList.first()
     } else null
+}
+
+fun chooseDefaultPreviewSize(
+    cameraCharacteristics: CameraCharacteristics,
+    imageFormat: Int = ImageFormat.YUV_420_888,
+    maxWidth: Int = 1280,
+): Size? {
+    val scaleStreamConfigurationMap = cameraCharacteristics.scaleStreamMap
+    val sensorAspectRatio = cameraCharacteristics.sensorAspectRatio
+    val outputSizeList = scaleStreamConfigurationMap?.getOutputSizes(imageFormat)
+    return outputSizeList?.run {
+        val aspectList = getSizeByAspectRatio(this, sensorAspectRatio)
+        // 320/640/960/1280/1440/1920
+        return@run findBestSize(aspectList.toTypedArray(), maxWidth)
+    }
 }
 
 // 获取最合适的预览帧率

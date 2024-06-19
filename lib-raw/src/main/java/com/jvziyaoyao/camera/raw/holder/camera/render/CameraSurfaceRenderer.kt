@@ -1,4 +1,4 @@
-package com.jvziyaoyao.camera.raw.holder.camera
+package com.jvziyaoyao.camera.raw.holder.camera.render
 
 import android.opengl.GLES10
 import android.opengl.GLES30
@@ -178,8 +178,10 @@ class CameraSurfaceRenderer(
         GLES30.glEnable(GLES30.GL_BLEND)
         GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
 
-        //将背景设置为白色
-        GLES30.glClearColor(1.0f, 1.0f, 1.0f, 1.0f)
+        // 将背景设置为白色
+//        GLES30.glClearColor(1.0f, 1.0f, 1.0f, 1.0f)
+        // 将背景设置为透明
+        GLES30.glClearColor(0.0f, 0.0f, 0.0f, 0.0f)
         //编译顶点着色程序
         val vertexShaderStr = readResourceAsString(context, R.raw.camera_mat_vertex_shader)
         val vertexShaderId = compileShader(GLES30.GL_VERTEX_SHADER, vertexShaderStr)

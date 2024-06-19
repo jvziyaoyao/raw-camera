@@ -4,17 +4,10 @@ import android.media.Image
 import android.opengl.GLSurfaceView
 import android.util.Log
 import androidx.compose.runtime.mutableStateOf
-import com.jvziyaoyao.camera.raw.holder.camera.CameraSurfaceRenderer
-import com.jvziyaoyao.camera.raw.holder.camera.TEX_VERTEX_MAT_0
-import com.jvziyaoyao.camera.raw.holder.camera.TEX_VERTEX_MAT_180
-import com.jvziyaoyao.camera.raw.holder.camera.TEX_VERTEX_MAT_270
-import com.jvziyaoyao.camera.raw.holder.camera.TEX_VERTEX_MAT_90
-import com.jvziyaoyao.camera.raw.holder.camera.YUVRenderData
 import com.jvziyaoyao.camera.raw.holder.camera.getHistogramData
 import com.jvziyaoyao.camera.raw.holder.camera.markOverExposedRegions
 import com.jvziyaoyao.camera.raw.holder.camera.markShapeImageRegions
 import com.jvziyaoyao.camera.raw.holder.camera.preMultiplyAlpha
-import com.jvziyaoyao.camera.raw.holder.camera.vertexHorizontalFlip
 import com.jvziyaoyao.camera.raw.util.testTime
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

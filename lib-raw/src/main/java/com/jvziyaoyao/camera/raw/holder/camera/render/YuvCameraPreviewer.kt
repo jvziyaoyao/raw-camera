@@ -1,15 +1,11 @@
 package com.jvziyaoyao.camera.raw.holder.camera.render
 
 import android.graphics.ImageFormat
-import android.hardware.camera2.CameraCharacteristics
 import android.media.Image
 import android.media.ImageReader
 import android.os.Handler
+import android.util.Size
 import android.view.Surface
-import com.jvziyaoyao.camera.raw.holder.camera.findBestSize
-import com.jvziyaoyao.camera.raw.holder.camera.getSizeByAspectRatio
-import com.jvziyaoyao.camera.raw.holder.camera.scaleStreamMap
-import com.jvziyaoyao.camera.raw.holder.camera.sensorAspectRatio
 
 class YuvCameraPreviewer(
     val onImage: (Image) -> Unit,
@@ -26,27 +22,18 @@ class YuvCameraPreviewer(
     }
 
     fun getPreviewSurface(
-        cameraCharacteristics: CameraCharacteristics,
+        previewSize: Size,
         handler: Handler
     ): Surface? {
-        val scaleStreamConfigurationMap = cameraCharacteristics.scaleStreamMap
-        val sensorAspectRatio = cameraCharacteristics.sensorAspectRatio
-        val outputSizeList = scaleStreamConfigurationMap?.getOutputSizes(ImageFormat.YUV_420_888)
-        val bestPreviewSize = outputSizeList?.run {
-            val aspectList = getSizeByAspectRatio(this, sensorAspectRatio)
-            return@run findBestSize(aspectList.toTypedArray(), 1280)
-        }
-        return if (bestPreviewSize != null) {
-            imagePreviewReader?.close()
-            imagePreviewReader = ImageReader.newInstance(
-                bestPreviewSize.width,
-                bestPreviewSize.height,
-                ImageFormat.YUV_420_888,
-                2
-            )
-            imagePreviewReader!!.setOnImageAvailableListener(previewImageAvailableListener, handler)
-            imagePreviewReader!!.surface
-        } else null
+        imagePreviewReader?.close()
+        imagePreviewReader = ImageReader.newInstance(
+            previewSize.width,
+            previewSize.height,
+            ImageFormat.YUV_420_888,
+            2
+        )
+        imagePreviewReader!!.setOnImageAvailableListener(previewImageAvailableListener, handler)
+        return imagePreviewReader!!.surface
     }
 
 

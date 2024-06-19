@@ -9,6 +9,7 @@ import android.widget.FrameLayout
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandIn
 import androidx.compose.animation.fadeIn
@@ -32,6 +33,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -90,11 +92,11 @@ import com.jvziyaoyao.raw.camera.base.rememberCoilImagePainter
 import com.jvziyaoyao.raw.camera.page.wheel.LocalVibratorHelper
 import com.jvziyaoyao.raw.camera.page.wheel.VibratorHelper
 import com.jvziyaoyao.raw.camera.ui.theme.Layout
-import com.jvziyaoyao.zoomable.previewer.PreviewerState
-import com.jvziyaoyao.zoomable.previewer.TransformItemView
-import com.jvziyaoyao.zoomable.previewer.VerticalDragType
-import com.jvziyaoyao.zoomable.previewer.rememberPreviewerState
-import com.jvziyaoyao.zoomable.previewer.rememberTransformItemState
+import com.jvziyaoyao.scale.zoomable.previewer.PreviewerState
+import com.jvziyaoyao.scale.zoomable.previewer.TransformItemView
+import com.jvziyaoyao.scale.zoomable.previewer.VerticalDragType
+import com.jvziyaoyao.scale.zoomable.previewer.rememberPreviewerState
+import com.jvziyaoyao.scale.zoomable.previewer.rememberTransformItemState
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.androidx.viewmodel.ext.android.viewModel
@@ -167,6 +169,9 @@ fun CameraBody() {
         pageCount = { images.size },
         getKey = { images[it].absolutePath },
     )
+    LaunchedEffect(previewerState.visibleTarget) {
+        viewModel.previewerVisibleTarget.value = previewerState.visibleTarget
+    }
 
     Column(
         modifier = Modifier
@@ -199,15 +204,15 @@ fun CameraBody() {
             }
         )
 
-//        Box(
-//            modifier = Modifier
-//                .fillMaxWidth()
-//                .weight(1F)
-//        ) {
-//            CameraActionFooter(previewerState)
-//        }
-//
-//        Spacer(modifier = Modifier.navigationBarsPadding())
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1F)
+        ) {
+            CameraActionFooter(previewerState)
+        }
+
+        Spacer(modifier = Modifier.navigationBarsPadding())
     }
 
     CameraPreviewer(images = images, previewerState = previewerState)
@@ -288,10 +293,15 @@ fun CameraActionHeader() {
             }
         }
 
+        val stiffness = 100F
         AnimatedVisibility(
             visible = showFlashOption.value,
             enter = expandIn { IntSize(0, it.height) } + fadeIn(),
-            exit = shrinkOut { IntSize(0, it.height) } + fadeOut(),
+            exit = shrinkOut(
+                animationSpec = spring(stiffness = stiffness)
+            ) { IntSize(0, it.height) } + fadeOut(
+                animationSpec = spring(stiffness = stiffness)
+            ),
         ) {
             Row(
                 modifier = Modifier
@@ -416,7 +426,7 @@ fun CameraActionFooter(
                                     .clip(
                                         RoundedCornerShape(
                                             (1 - previewerState.decorationAlpha.value)
-                                                .times(100).dp
+                                                .times(400).dp
                                         )
                                     ),
                                 painter = painter,
