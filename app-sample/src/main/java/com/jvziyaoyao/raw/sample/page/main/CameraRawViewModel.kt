@@ -14,6 +14,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.jvziyaoyao.camera.raw.holder.camera.CameraFlow
+import com.jvziyaoyao.camera.raw.holder.camera.OutputMode
 import com.jvziyaoyao.camera.raw.holder.camera.filter.defaultImageFilterList
 import com.jvziyaoyao.camera.raw.holder.camera.isFrontCamera
 import com.jvziyaoyao.camera.raw.holder.camera.off.getGLFilterBitmapAsync
@@ -24,7 +25,7 @@ import com.jvziyaoyao.camera.raw.holder.camera.resizeMat
 import com.jvziyaoyao.camera.raw.holder.camera.toMat
 import com.jvziyaoyao.camera.raw.holder.sensor.SensorFlow
 import com.jvziyaoyao.camera.raw.util.ContextUtil
-import com.jvziyaoyao.camera.raw.util.readResourceAsString
+import com.jvziyaoyao.camera.raw.util.saveBitmapWithExif
 import com.jvziyaoyao.raw.sample.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -263,6 +264,7 @@ class CameraRawViewModel : ViewModel() {
         yuvCameraRenderer.setSurfaceView(glSurfaceView)
 
     suspend fun onCapture() {
+        val context = ContextUtil.getApplicationByReflect()
         val outputItem = cameraFlow.currentOutputItemFlow.value ?: return
         val extName = outputItem.outputMode.extName
         val time = System.currentTimeMillis()
@@ -271,6 +273,15 @@ class CameraRawViewModel : ViewModel() {
             outputFile,
             additionalRotation = saveImageOrientation.value,
         )
+        // 滤镜当前仅支持JPEG
+        if (outputItem.outputMode == OutputMode.JPEG) {
+            val imageFilter = currentImageFilterFlow.value
+            if (!imageFilter.isNullOrEmpty() && imageFilter != imageFilterReplacement) {
+                saveBitmapWithExif(outputFile, outputFile) { bitmap ->
+                    getGLFilterBitmapAsync(context, imageFilter, bitmap)
+                }
+            }
+        }
     }
 
     val focusRequestTriggerFlow
