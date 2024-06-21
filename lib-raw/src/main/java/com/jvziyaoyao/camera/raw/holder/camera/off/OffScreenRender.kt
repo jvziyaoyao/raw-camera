@@ -12,13 +12,14 @@ interface Renderer {
 
 class OffScreenRender(
     context: Context,
+    imageFilterStr: String,
     bitmap: Bitmap,
     onBitmap: (Bitmap) -> Unit,
 ) : Renderer {
     private val mOffScreenImageModel: OffScreenImageModel
 
     init {
-        mOffScreenImageModel = OffScreenImageModel(context, bitmap, onBitmap)
+        mOffScreenImageModel = OffScreenImageModel(context, imageFilterStr, bitmap, onBitmap)
     }
 
     override fun onSurfaceCreated() {

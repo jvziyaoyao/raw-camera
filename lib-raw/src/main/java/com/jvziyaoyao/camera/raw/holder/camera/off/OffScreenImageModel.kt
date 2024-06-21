@@ -6,6 +6,7 @@ import android.graphics.Point
 import android.opengl.GLES30
 import android.opengl.GLUtils
 import com.jvziyaoyao.camera.raw.R
+import com.jvziyaoyao.camera.raw.holder.camera.render.imageFilterReplacement
 import com.jvziyaoyao.camera.raw.util.compileShader
 import com.jvziyaoyao.camera.raw.util.linkProgram
 import com.jvziyaoyao.camera.raw.util.readResourceAsString
@@ -15,6 +16,7 @@ import java.nio.FloatBuffer
 
 class OffScreenImageModel(
     private val context: Context,
+    private val imageFilterStr: String,
     private val bitmap: Bitmap,
     private val onBitmap: (Bitmap) -> Unit,
 ) {
@@ -36,7 +38,8 @@ class OffScreenImageModel(
         val vertexShaderStr = readResourceAsString(context, R.raw.output_vertex_shader)
         val vertexShaderId = compileShader(GLES30.GL_VERTEX_SHADER, vertexShaderStr)
         //编译片段着色程序
-        val fragmentShaderStr = readResourceAsString(context, R.raw.output_fragment_shader)
+        var fragmentShaderStr = readResourceAsString(context, R.raw.output_fragment_shader)
+        fragmentShaderStr = fragmentShaderStr.replace(imageFilterReplacement, imageFilterStr)
         val fragmentShaderId = compileShader(GLES30.GL_FRAGMENT_SHADER, fragmentShaderStr)
         //连接程序
         mProgramId = linkProgram(vertexShaderId, fragmentShaderId)

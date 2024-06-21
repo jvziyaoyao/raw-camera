@@ -8,18 +8,7 @@ uniform bool useAdditionalTexture;
 in vec2 vTexCoord;
 out vec4 vFragColor;
 
-//黑白滤镜
-void blackAndWhite(inout vec4 color) {
-    float threshold = 0.5;
-    float mean = (color.r + color.g + color.b) / 3.0;
-    color.r = color.g = color.b = mean >= threshold ? 1.0 : 0.0;
-}
-
-//灰度滤镜
-void grey(inout vec4 color){
-    float weightMean = color.r * 0.3 + color.g * 0.59 + color.b * 0.11;
-    color.r = color.g = color.b = weightMean;
-}
+void imageFilter(inout vec4 color) {}
 
 void main() {
     //    vec4 cameraColor = texture(cameraTexture, vTexCoord);
@@ -53,5 +42,5 @@ void main() {
         vFragColor = cameraColor;
     }
 
-//    grey(vFragColor);
+    imageFilter(vFragColor);
 }

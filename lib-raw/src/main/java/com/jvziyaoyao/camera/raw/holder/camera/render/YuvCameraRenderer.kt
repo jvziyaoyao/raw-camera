@@ -4,10 +4,13 @@ import android.media.Image
 import android.opengl.GLSurfaceView
 import android.util.Log
 import androidx.compose.runtime.mutableStateOf
+import com.jvziyaoyao.camera.raw.R
 import com.jvziyaoyao.camera.raw.holder.camera.getHistogramData
 import com.jvziyaoyao.camera.raw.holder.camera.markOverExposedRegions
 import com.jvziyaoyao.camera.raw.holder.camera.markShapeImageRegions
 import com.jvziyaoyao.camera.raw.holder.camera.preMultiplyAlpha
+import com.jvziyaoyao.camera.raw.util.ContextUtil
+import com.jvziyaoyao.camera.raw.util.readResourceAsString
 import com.jvziyaoyao.camera.raw.util.testTime
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -31,11 +34,11 @@ class YuvCameraRenderer : CoroutineScope by MainScope() {
 
     private var glSurfaceViewFlow = MutableStateFlow<GLSurfaceView?>(null)
 
-    private val cameraSurfaceRender = CameraSurfaceRenderer(TEX_VERTEX_MAT_0)
+    private var yuvSurfaceRender = YuvSurfaceRenderer(TEX_VERTEX_MAT_0)
 
     private var frameCount = 0
 
-    private val yuvDataFlow = MutableStateFlow<YUVRenderData?>(null)
+    val yuvDataFlow = MutableStateFlow<YUVRenderData?>(null)
 
     private val grayMatFlow = MutableStateFlow<Mat?>(null)
 
@@ -57,6 +60,8 @@ class YuvCameraRenderer : CoroutineScope by MainScope() {
 
     val resumeTimestampFlow = MutableStateFlow<Long?>(null)
 
+    val currentImageFilterFlow = MutableStateFlow<String?>(null)
+
     init {
         // 初始化OpenCV
         OpenCVLoader.initLocal()
@@ -65,7 +70,7 @@ class YuvCameraRenderer : CoroutineScope by MainScope() {
     fun setSurfaceView(glSurfaceView: GLSurfaceView) {
         glSurfaceViewFlow.value = glSurfaceView
         glSurfaceView.setEGLContextClientVersion(3)
-        glSurfaceView.setRenderer(cameraSurfaceRender)
+        glSurfaceView.setRenderer(yuvSurfaceRender)
     }
 
     fun upDateVertex(isFrontCamera: Boolean, rotationOrientation: Int) {
@@ -78,8 +83,9 @@ class YuvCameraRenderer : CoroutineScope by MainScope() {
         }
         if (isFrontCamera) nextTextureVertex =
             vertexHorizontalFlip(nextTextureVertex)
-        cameraSurfaceRender.currentYuvData = null
-        cameraSurfaceRender.updateTextureBuffer(nextTextureVertex)
+
+        yuvSurfaceRender.currentYuvData = null
+        yuvSurfaceRender.updateTextureBuffer(nextTextureVertex)
     }
 
     fun setupRenderer() {
@@ -92,18 +98,18 @@ class YuvCameraRenderer : CoroutineScope by MainScope() {
                         job?.cancel()
                         job = launch(Dispatchers.IO) {
                             var currentCount = frameCount
-                            var currentRenderCount = cameraSurfaceRender.frameCount
+                            var currentRenderCount = yuvSurfaceRender.frameCount
                             while (resumeTimestampFlow.value != null) {
                                 delay(1000)
                                 Log.i(
                                     TAG,
-                                    "onCreate: calc frame 计算帧率： $frameCount - ${cameraSurfaceRender.frameCount}"
+                                    "onCreate: calc frame 计算帧率： $frameCount - ${yuvSurfaceRender.frameCount}"
                                 )
                                 captureFrameRate.value = frameCount - currentCount
                                 rendererFrameRate.value =
-                                    cameraSurfaceRender.frameCount - currentRenderCount
+                                    yuvSurfaceRender.frameCount - currentRenderCount
                                 currentCount = frameCount
-                                currentRenderCount = cameraSurfaceRender.frameCount
+                                currentRenderCount = yuvSurfaceRender.frameCount
                             }
                         }
                     } else {
@@ -116,7 +122,7 @@ class YuvCameraRenderer : CoroutineScope by MainScope() {
         // 填充预览yuv数据
         launch(Dispatchers.IO) {
             yuvDataFlow.collectLatest {
-                cameraSurfaceRender.currentYuvData = it
+                yuvSurfaceRender.currentYuvData = it
             }
         }
 
@@ -173,7 +179,7 @@ class YuvCameraRenderer : CoroutineScope by MainScope() {
             }.collectLatest {
                 val brightnessPeakingMat = brightnessPeakingMatFlow.value
                 val focusPeakingMat = focusPeakingMatFlow.value
-                cameraSurfaceRender.currentAdditionalMat =
+                yuvSurfaceRender.currentAdditionalMat =
                     if (brightnessPeakingMat != null && focusPeakingMat != null) {
                         Mat(brightnessPeakingMat.size(), CvType.CV_8UC4).apply {
                             Core.addWeighted(
@@ -186,6 +192,17 @@ class YuvCameraRenderer : CoroutineScope by MainScope() {
                             )
                         }
                     } else brightnessPeakingMat ?: focusPeakingMat
+            }
+        }
+
+        // 动态设置滤镜，重新创建shader
+        launch(Dispatchers.IO) {
+            currentImageFilterFlow.collectLatest {
+                if (!it.isNullOrEmpty()) {
+                    glSurfaceViewFlow.value?.queueEvent {
+                        yuvSurfaceRender.createShaderProgram(it)
+                    }
+                }
             }
         }
     }

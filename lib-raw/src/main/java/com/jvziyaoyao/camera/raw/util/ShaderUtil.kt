@@ -31,12 +31,14 @@ fun compileShader(type: Int, shaderCode: String): Int {
         if (compileStatus[0] == 0) {
             val logInfo = GLES30.glGetShaderInfoLog(shaderId)
             System.err.println(logInfo)
+            Log.e("TAG", "compileShader: logInfo $logInfo")
             //创建失败
             GLES30.glDeleteShader(shaderId)
             return 0
         }
         return shaderId
     } else {
+        Log.e("TAG", "compileShader: 创建失败")
         //创建失败
         return 0
     }

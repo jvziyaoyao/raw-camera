@@ -9,6 +9,7 @@ import org.opencv.core.MatOfFloat
 import org.opencv.core.MatOfInt
 import org.opencv.core.Point
 import org.opencv.core.Scalar
+import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
 
 /**
@@ -125,4 +126,10 @@ fun createZebraPattern(zebraOffsetArr: IntArray, size: org.opencv.core.Size): Ma
     if (nextZebraOffset > stripeStep) nextZebraOffset = 0
     zebraOffsetArr[0] = nextZebraOffset
     return zebraPattern
+}
+
+fun resizeMat(srcMat: Mat, newWidth: Int, newHeight: Int): Mat {
+    val resizedMat = Mat()
+    Imgproc.resize(srcMat, resizedMat, Size(newWidth.toDouble(), newHeight.toDouble()))
+    return resizedMat
 }

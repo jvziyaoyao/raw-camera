@@ -1,6 +1,5 @@
 package com.jvziyaoyao.camera.raw.holder.camera.render
 
-import android.opengl.GLES10
 import android.opengl.GLES30
 import android.opengl.GLSurfaceView
 import android.opengl.Matrix
@@ -8,7 +7,9 @@ import android.util.Log
 import com.jvziyaoyao.camera.raw.R
 import com.jvziyaoyao.camera.raw.util.ContextUtil
 import com.jvziyaoyao.camera.raw.util.compileShader
+import com.jvziyaoyao.camera.raw.util.fillMatTexture
 import com.jvziyaoyao.camera.raw.util.linkProgram
+import com.jvziyaoyao.camera.raw.util.loadEmptyMatTexture
 import com.jvziyaoyao.camera.raw.util.readResourceAsString
 import org.opencv.core.Mat
 import java.nio.ByteBuffer
@@ -88,11 +89,12 @@ data class YUVRenderData(
     val vByteArray: ByteBuffer,
 )
 
-class CameraSurfaceRenderer(
-    private var textureVertex: FloatArray,
-) : GLSurfaceView.Renderer {
+const val imageFilterReplacement = "void imageFilter(inout vec4 color) {}"
 
-    private val TAG = CameraSurfaceRenderer::class.java.name
+class YuvSurfaceRenderer(
+    private var textureVertex: FloatArray = TEX_VERTEX_MAT_0,
+    private var imageFilterStr: String = imageFilterReplacement,
+) : GLSurfaceView.Renderer {
 
     /**
      * 顶点坐标
@@ -139,7 +141,7 @@ class CameraSurfaceRenderer(
     private val resultMatrix = getBitmapMVPMatrix()
 
     // 着色器id
-    private var programId by Delegates.notNull<Int>()
+//    private var programId by Delegates.notNull<Int>()
 
     var currentYuvData: YUVRenderData? = null
 
@@ -167,13 +169,9 @@ class CameraSurfaceRenderer(
 
     private var textureBuffer: FloatBuffer = getNewTextureBuffer(textureVertex)
 
-    override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
-        val extensions = GLES10.glGetString(GL10.GL_EXTENSIONS)
-        val isLuminanceAlphaSupported =
-            extensions.contains("GL_EXT_texture_format_BGRA8888") || extensions.contains("GL_APPLE_texture_format_BGRA8888")
-        Log.i(TAG, "onSurfaceCreated: isLuminanceAlphaSupported $isLuminanceAlphaSupported")
+    private val context = ContextUtil.getApplicationByReflect()
 
-        val context = ContextUtil.getApplicationByReflect()
+    override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
 
         GLES30.glEnable(GLES30.GL_BLEND)
         GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
@@ -182,30 +180,43 @@ class CameraSurfaceRenderer(
 //        GLES30.glClearColor(1.0f, 1.0f, 1.0f, 1.0f)
         // 将背景设置为透明
         GLES30.glClearColor(0.0f, 0.0f, 0.0f, 0.0f)
-        //编译顶点着色程序
-        val vertexShaderStr = readResourceAsString(context, R.raw.camera_mat_vertex_shader)
-        val vertexShaderId = compileShader(GLES30.GL_VERTEX_SHADER, vertexShaderStr)
-        //编译片段着色程序
-        val fragmentShaderStr = readResourceAsString(context, R.raw.camera_mat_fragment_shader)
-        val fragmentShaderId = compileShader(GLES30.GL_FRAGMENT_SHADER, fragmentShaderStr)
-        //连接程序
-        programId = linkProgram(vertexShaderId, fragmentShaderId)
-        //在OpenGLES环境中使用程序
-        GLES30.glUseProgram(programId)
-        uMatrixLocation = GLES30.glGetUniformLocation(programId, "uTextureMatrix")
-        aPositionLocation = GLES30.glGetAttribLocation(programId, "vPosition")
-        aTextureLocation = GLES30.glGetAttribLocation(programId, "aTextureCoord")
-        //获取Shader中定义的变量在program中的位置
-        additionalSamplerLocation = GLES30.glGetUniformLocation(programId, "additionalTexture")
-        ySamplerLocation = GLES30.glGetUniformLocation(programId, "yTexture")
-        uSamplerLocation = GLES30.glGetUniformLocation(programId, "uTexture")
-        vSamplerLocation = GLES30.glGetUniformLocation(programId, "vTexture")
-        useAdditionalTexture = GLES30.glGetUniformLocation(programId, "useAdditionalTexture")
+
+        // 链接着色器
+        createShaderProgram(imageFilterStr)
+
         // 加载纹理
         yTextureId = loadEmptyYuvTexture()
         uTextureId = loadEmptyYuvTexture()
         vTextureId = loadEmptyYuvTexture()
         additionalTextureId = loadEmptyMatTexture()
+    }
+
+    private var vertexShaderId = -1
+    private var fragmentShaderId = -1
+
+    fun createShaderProgram(
+        imageFilterStr: String = imageFilterReplacement,
+    ) {
+        // 编译顶点着色程序
+        val vertexShaderStr = readResourceAsString(context, R.raw.camera_mat_vertex_shader)
+        vertexShaderId = compileShader(GLES30.GL_VERTEX_SHADER, vertexShaderStr)
+        // 编译片段着色程序
+        var fragmentShaderStr = readResourceAsString(context, R.raw.camera_mat_fragment_shader)
+        fragmentShaderStr = fragmentShaderStr.replace(imageFilterReplacement, imageFilterStr)
+        fragmentShaderId = compileShader(GLES30.GL_FRAGMENT_SHADER, fragmentShaderStr)
+        // 连接程序
+        val programId = linkProgram(vertexShaderId, fragmentShaderId)
+        // 在OpenGLES环境中使用程序
+        GLES30.glUseProgram(programId)
+        uMatrixLocation = GLES30.glGetUniformLocation(programId, "uTextureMatrix")
+        aPositionLocation = GLES30.glGetAttribLocation(programId, "vPosition")
+        aTextureLocation = GLES30.glGetAttribLocation(programId, "aTextureCoord")
+        // 获取Shader中定义的变量在program中的位置
+        additionalSamplerLocation = GLES30.glGetUniformLocation(programId, "additionalTexture")
+        ySamplerLocation = GLES30.glGetUniformLocation(programId, "yTexture")
+        uSamplerLocation = GLES30.glGetUniformLocation(programId, "uTexture")
+        vSamplerLocation = GLES30.glGetUniformLocation(programId, "vTexture")
+        useAdditionalTexture = GLES30.glGetUniformLocation(programId, "useAdditionalTexture")
     }
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
@@ -219,7 +230,7 @@ class CameraSurfaceRenderer(
         currentYuvData?.apply {
             drawCameraLayer(this)
             GLES30.glUniform1i(useAdditionalTexture, 0)
-            drawAdditionalLayer(this)
+            drawAdditionalLayer()
         }
     }
 
@@ -238,39 +249,6 @@ class CameraSurfaceRenderer(
                 put(nextTextureVertex)
                 position(0)
             }
-    }
-
-    private fun loadEmptyMatTexture(): Int {
-        val textureIds = IntArray(1)
-        //创建一个纹理对象
-        GLES30.glGenTextures(1, textureIds, 0)
-        if (textureIds[0] == 0) return 0
-        //绑定纹理到OpenGL
-        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, textureIds[0])
-        //设置默认的纹理过滤参数
-        GLES30.glTexParameteri(
-            GLES30.GL_TEXTURE_2D,
-            GLES30.GL_TEXTURE_MIN_FILTER,
-            GLES30.GL_NEAREST
-        )
-        GLES30.glTexParameteri(
-            GLES30.GL_TEXTURE_2D,
-            GLES30.GL_TEXTURE_MAG_FILTER,
-            GLES30.GL_NEAREST
-        )
-        GLES30.glTexParameteri(
-            GLES30.GL_TEXTURE_2D,
-            GLES30.GL_TEXTURE_WRAP_S,
-            GLES30.GL_CLAMP_TO_EDGE
-        )
-        GLES30.glTexParameteri(
-            GLES30.GL_TEXTURE_2D,
-            GLES30.GL_TEXTURE_WRAP_T,
-            GLES30.GL_CLAMP_TO_EDGE
-        )
-        //取消绑定纹理
-        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, 0)
-        return textureIds[0]
     }
 
     private fun loadEmptyYuvTexture(): Int {
@@ -306,23 +284,6 @@ class CameraSurfaceRenderer(
         //取消绑定纹理
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, 0)
         return textureIds[0]
-    }
-
-    private fun fillMatTexture(mat: Mat) {
-        val matData = ByteArray(mat.width() * mat.height() * 4)
-        mat.get(0, 0, matData)
-        GLES30.glTexImage2D(
-            GLES30.GL_TEXTURE_2D,
-            0,
-            GLES30.GL_RGBA,
-            mat.cols(),
-            mat.rows(),
-            0,
-            GLES30.GL_RGBA,
-            GLES30.GL_UNSIGNED_BYTE,
-            ByteBuffer.wrap(matData),
-        )
-        GLES30.glGenerateMipmap(GLES30.GL_TEXTURE_2D)
     }
 
     private fun getBitmapMVPMatrix(): FloatArray {
@@ -391,7 +352,7 @@ class CameraSurfaceRenderer(
         }
     }
 
-    private fun drawAdditionalLayer(yuvRenderData: YUVRenderData) {
+    private fun drawAdditionalLayer() {
         currentAdditionalMat?.apply {
             // 这个控制是否开启
             GLES30.glUniform1i(useAdditionalTexture, 1)

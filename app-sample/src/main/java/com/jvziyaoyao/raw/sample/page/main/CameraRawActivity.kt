@@ -16,6 +16,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -79,6 +80,8 @@ import com.jvziyaoyao.camera.raw.holder.camera.cameraRequirePermissions
 import com.jvziyaoyao.camera.raw.holder.camera.defaultSensorAspectRatio
 import com.jvziyaoyao.camera.raw.holder.camera.faceDetectModes
 import com.jvziyaoyao.camera.raw.holder.camera.faceDetectResult
+import com.jvziyaoyao.camera.raw.holder.camera.filter.ImageFilterRenderer
+import com.jvziyaoyao.camera.raw.holder.camera.filter.context
 import com.jvziyaoyao.camera.raw.holder.camera.flashInfoAvailable
 import com.jvziyaoyao.camera.raw.holder.camera.focalDistanceRange
 import com.jvziyaoyao.camera.raw.holder.camera.getFingerPointRect
@@ -87,6 +90,8 @@ import com.jvziyaoyao.camera.raw.holder.camera.oisAvailable
 import com.jvziyaoyao.camera.raw.holder.camera.outputSupportedMode
 import com.jvziyaoyao.camera.raw.holder.camera.rectFromNormalized
 import com.jvziyaoyao.camera.raw.holder.camera.rectNormalized
+import com.jvziyaoyao.camera.raw.holder.camera.render.TEX_VERTEX_MAT_90
+import com.jvziyaoyao.camera.raw.holder.camera.render.imageFilterReplacement
 import com.jvziyaoyao.camera.raw.holder.camera.sceneMode
 import com.jvziyaoyao.camera.raw.holder.camera.sceneModes
 import com.jvziyaoyao.camera.raw.holder.camera.sensorAspectRatio
@@ -101,6 +106,7 @@ import com.jvziyaoyao.raw.sample.ui.base.CommonPermissions
 import com.jvziyaoyao.raw.sample.ui.base.animateRotationAsState
 import com.jvziyaoyao.raw.sample.ui.theme.Layout
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
@@ -557,6 +563,7 @@ fun CameraRawInfoLayer() {
 fun CameraRawActionLayer(
     onCapture: () -> Unit,
 ) {
+    val scope = rememberCoroutineScope()
     val viewModel: CameraRawViewModel = koinViewModel()
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -578,12 +585,93 @@ fun CameraRawActionLayer(
                 .padding(Layout.padding.pm)
                 .align(Alignment.BottomCenter)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+            ) {
+                Row(
+                    modifier = Modifier,
+                    horizontalArrangement = Arrangement.spacedBy(Layout.padding.ps),
+                ) {
+                    val currentImageFilterStr = viewModel.currentImageFilterFlow.collectAsState()
+                    viewModel.imageFilterList.forEach { imageFilter ->
+                        val isEmptyImageFilter = imageFilter.shaderStr == imageFilterReplacement
+                        val selected = if (isEmptyImageFilter) {
+                            currentImageFilterStr.value == null || currentImageFilterStr.value == imageFilter.shaderStr
+                        } else {
+                            currentImageFilterStr.value == imageFilter.shaderStr
+                        }
+                        val imageFilterRenderer = remember {
+                            ImageFilterRenderer(TEX_VERTEX_MAT_90, imageFilter.shaderStr)
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .size(60.dp)
+                                .border(
+                                    width = 2.dp,
+                                    color = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                )
+                                .clickable {
+                                    viewModel.currentImageFilterFlow.value = imageFilter.shaderStr
+                                },
+                        ) {
+                            AndroidView(
+                                modifier = Modifier
+                                    .fillMaxSize(),
+                                factory = { ctx ->
+                                    GLSurfaceView(ctx).apply {
+                                        layoutParams = FrameLayout.LayoutParams(
+                                            ViewGroup.LayoutParams.MATCH_PARENT,
+                                            ViewGroup.LayoutParams.MATCH_PARENT
+                                        )
+                                        setEGLContextClientVersion(3)
+                                        setRenderer(imageFilterRenderer)
+                                        scope.launch(Dispatchers.IO) {
+                                            viewModel.filterRendererMatFlow.collectLatest {
+                                                imageFilterRenderer.currentAdditionalMat = it
+                                            }
+                                        }
+                                    }
+                                }
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .fillMaxWidth()
+                                    .background(MaterialTheme.colorScheme.surface.copy(0.6F))
+                                    .padding(vertical = Layout.padding.pxxs),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = imageFilter.name,
+                                    fontSize = Layout.fontSize.fxxs,
+                                    color = MaterialTheme.colorScheme.onBackground.copy(0.4F)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier.padding(top = Layout.padding.ps),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Layout.padding.ps),
+            ) {
                 Button(onClick = {
                     viewModel.focusRequestOrientation.value = null
                     viewModel.focusCancel()
                 }) {
                     Text(text = "取消对焦")
+                }
+                Button(onClick = {
+                    scope.launch {
+                        viewModel.getTestBitmap(context = context)
+                    }
+                }) {
+                    Text(text = "测试")
                 }
             }
 
