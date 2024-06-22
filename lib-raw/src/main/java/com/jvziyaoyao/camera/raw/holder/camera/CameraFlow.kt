@@ -123,7 +123,7 @@ class CameraFlow(
         if (cameraCaptureSessionFlow.value == null) return
         val cameraDevice = cameraDeviceFlow.value ?: return
 
-        var imageOrientation = rotationOrientation.value
+        var imageOrientation = rotationOrientationFlow.value
         if (additionalRotation != null) {
             val srcImageOrientation =
                 if (imageOrientation < additionalRotation) imageOrientation + 360 else imageOrientation
@@ -223,7 +223,7 @@ class CameraFlow(
             } else {
                 (sensorOrientation - displayRotation + 360) % 360
             }
-            rotationOrientation.value = rotationOrientationResult
+            rotationOrientationFlow.value = rotationOrientationResult
         }
     }
 
@@ -497,7 +497,7 @@ class CameraFlow(
 
     private val resumeTimestampFlow = MutableStateFlow<Long?>(null)
 
-    val rotationOrientation = MutableStateFlow(0)
+    val rotationOrientationFlow = MutableStateFlow(0)
 
     val cameraPairListFlow =
         MutableStateFlow(emptyList<Pair<String, CameraCharacteristics>>())
@@ -574,7 +574,7 @@ class CameraFlow(
             if (sensorSize == null) null else {
                 composeRect2SensorRect(
                     rect = rect,
-                    rotationOrientation = rotationOrientation.value,
+                    rotationOrientation = rotationOrientationFlow.value,
                     flipHorizontal = flipHorizontal,
                     sensorWidth = sensorSize.width(),
                     sensorHeight = sensorSize.height(),

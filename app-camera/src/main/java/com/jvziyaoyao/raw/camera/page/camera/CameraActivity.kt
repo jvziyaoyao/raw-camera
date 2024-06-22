@@ -43,6 +43,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.FlashAuto
 import androidx.compose.material.icons.filled.FlashOff
 import androidx.compose.material.icons.filled.FlashOn
@@ -79,8 +80,10 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.jvziyaoyao.camera.raw.holder.camera.FlashMode
+import com.jvziyaoyao.camera.raw.holder.camera.OutputMode
 import com.jvziyaoyao.camera.raw.holder.camera.cameraRequirePermissions
 import com.jvziyaoyao.camera.raw.holder.camera.defaultSensorAspectRatio
+import com.jvziyaoyao.camera.raw.holder.camera.render.isEmptyImageFilter
 import com.jvziyaoyao.camera.raw.holder.camera.sensorAspectRatio
 import com.jvziyaoyao.raw.camera.base.BaseActivity
 import com.jvziyaoyao.raw.camera.base.CommonPermissions
@@ -181,22 +184,31 @@ fun CameraBody() {
         Spacer(modifier = Modifier.statusBarsPadding())
         CameraActionHeader()
 
+        val pictureMode = viewModel.pictureModeFlow.collectAsState()
+        val showFilterList = viewModel.showFilterList
+
         CameraPreviewLayer(
             foreground = {
                 if (viewModel.gridEnable.value) CameraGridIndicator()
                 CameraFocusLayer()
                 CameraFaceDetectLayer()
 
-                val pictureMode = viewModel.pictureMode
                 ScaleAnimatedVisibility(
-                    visible = pictureMode.value == PictureMode.Manual,
+                    visible = pictureMode.value == PictureMode.Manual && !showFilterList.value,
                 ) {
                     CameraManualLayer()
                 }
+
                 FadeAnimatedVisibility(
-                    visible = pictureMode.value == PictureMode.Normal,
+                    visible = pictureMode.value == PictureMode.Normal && !showFilterList.value,
                 ) {
                     CameraNormalLayer()
+                }
+
+                ScaleAnimatedVisibility(
+                    visible = showFilterList.value,
+                ) {
+                    CameraFilterLayer()
                 }
 
                 CameraCaptureInfoLayer()
@@ -204,12 +216,35 @@ fun CameraBody() {
             }
         )
 
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1F)
         ) {
-            CameraActionFooter(previewerState)
+            Spacer(modifier = Modifier.height(Layout.padding.ps))
+
+            if (showFilterList.value) {
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CameraModeTextButton(
+                        label = "滤镜",
+                        selected = true
+                    ) {
+                        showFilterList.value = false
+                    }
+                }
+            } else {
+                CameraPictureModeRow()
+            }
+
+            CameraActionFooter(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1F),
+                previewerState = previewerState
+            )
         }
 
         Spacer(modifier = Modifier.navigationBarsPadding())
@@ -265,20 +300,40 @@ fun CameraActionHeader() {
                     .fillMaxWidth()
                     .padding(Layout.padding.pxs)
             ) {
-                IconButton(
+                Row(
                     modifier = Modifier.align(Alignment.CenterStart),
-                    onClick = {
-                        showFlashOption.value = true
-                    },
+                    horizontalArrangement = Arrangement.spacedBy(Layout.padding.ps),
                 ) {
-                    val flashLightMode = flashMode.value.flashLightMode
-                    Icon(
-                        imageVector = flashLightMode.icon,
-                        tint = if (flashLightMode != FlashLightMode.OFF) MaterialTheme.colorScheme.primary
-                        else LocalContentColor.current,
-                        contentDescription = null
-                    )
+                    IconButton(
+                        onClick = {
+                            showFlashOption.value = true
+                        },
+                    ) {
+                        val flashLightMode = flashMode.value.flashLightMode
+                        Icon(
+                            imageVector = flashLightMode.icon,
+                            tint = if (flashLightMode != FlashLightMode.OFF) MaterialTheme.colorScheme.primary
+                            else LocalContentColor.current,
+                            contentDescription = null
+                        )
+                    }
+
+                    val currentOutputItem = viewModel.currentOutputItemFlow.collectAsState()
+                    IconButton(
+                        enabled = currentOutputItem.value?.outputMode == OutputMode.JPEG,
+                        onClick = {
+                            viewModel.showFilterList.value = !viewModel.showFilterList.value
+                        },
+                    ) {
+                        val currentImageFilter = viewModel.currentImageFilterFlow.collectAsState()
+                        Icon(
+                            imageVector = Icons.Filled.AutoAwesome,
+                            tint = if (currentImageFilter.value.isEmptyImageFilter()) LocalContentColor.current else MaterialTheme.colorScheme.primary,
+                            contentDescription = null
+                        )
+                    }
                 }
+
                 IconButton(
                     modifier = Modifier.align(Alignment.CenterEnd),
                     onClick = {
@@ -337,103 +392,96 @@ fun CameraActionHeader() {
 
 @Composable
 fun CameraActionFooter(
+    modifier: Modifier = Modifier,
     previewerState: PreviewerState,
 ) {
     val scope = rememberCoroutineScope()
     val viewModel: CameraViewModel = koinViewModel()
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-    ) {
-        Spacer(modifier = Modifier.height(Layout.padding.ps))
-        CameraPictureModeRow()
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1F)
-                .padding(horizontal = Layout.padding.pxl),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceAround,
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = Layout.padding.pxl),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceAround,
+    ) {
+        @Composable
+        fun SideCircleWrap(
+            onClick: () -> Unit,
+            content: @Composable () -> Unit,
         ) {
-            @Composable
-            fun SideCircleWrap(
-                onClick: () -> Unit,
-                content: @Composable () -> Unit,
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.onBackground.copy(0.2F))
-                        .clickable(
-                            onClick = onClick,
-                        )
-                ) {
-                    content()
-                }
-            }
-            SideCircleWrap(
-                onClick = {
-                    viewModel.switchCamera()
-                }
-            ) {
-                Box(modifier = Modifier.fillMaxSize()) {
-                    Icon(
-                        modifier = Modifier
-                            .fillMaxSize(0.6F)
-                            .align(Alignment.Center),
-                        imageVector = Icons.Outlined.Refresh, contentDescription = null
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.onBackground.copy(0.2F))
+                    .clickable(
+                        onClick = onClick,
                     )
+            ) {
+                content()
+            }
+        }
+        SideCircleWrap(
+            onClick = {
+                viewModel.switchCamera()
+            }
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                Icon(
+                    modifier = Modifier
+                        .fillMaxSize(0.6F)
+                        .align(Alignment.Center),
+                    imageVector = Icons.Outlined.Refresh, contentDescription = null
+                )
+            }
+        }
+        CameraCaptureButton(
+            loading = viewModel.captureLoading.value,
+            onClick = {
+                scope.launch {
+                    viewModel.captureLoading.value = true
+                    try {
+                        viewModel.capture()
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    } finally {
+                        viewModel.captureLoading.value = false
+                    }
                 }
             }
-            CameraCaptureButton(
-                loading = viewModel.captureLoading.value,
-                onClick = {
-                    scope.launch {
-                        viewModel.captureLoading.value = true
-                        try {
-                            viewModel.capture()
-                        } catch (e: Exception) {
-                            e.printStackTrace()
-                        } finally {
-                            viewModel.captureLoading.value = false
-                        }
-                    }
+        )
+        SideCircleWrap(
+            onClick = {
+                scope.launch {
+                    previewerState.enterTransform(0)
                 }
-            )
-            SideCircleWrap(
-                onClick = {
-                    scope.launch {
-                        previewerState.enterTransform(0)
-                    }
-                }
-            ) {
-                viewModel.imagesFileList.apply {
-                    if (isNotEmpty()) {
-                        val imageFile = first()
-                        val painter = rememberCoilImagePainter(image = imageFile)
-                        val itemState =
-                            rememberTransformItemState(intrinsicSize = painter.intrinsicSize)
-                        TransformItemView(
-                            key = imageFile.absolutePath,
-                            itemState = itemState,
-                            transformState = previewerState,
-                        ) {
-                            Image(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .clip(
-                                        RoundedCornerShape(
-                                            (1 - previewerState.decorationAlpha.value)
-                                                .times(400).dp
-                                        )
-                                    ),
-                                painter = painter,
-                                contentScale = ContentScale.Crop,
-                                contentDescription = null,
-                            )
-                        }
+            }
+        ) {
+            viewModel.imagesFileList.apply {
+                if (isNotEmpty()) {
+                    val imageFile = first()
+                    val painter = rememberCoilImagePainter(image = imageFile)
+                    val itemState =
+                        rememberTransformItemState(intrinsicSize = painter.intrinsicSize)
+                    TransformItemView(
+                        key = imageFile.absolutePath,
+                        itemState = itemState,
+                        transformState = previewerState,
+                    ) {
+                        Image(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(
+                                    RoundedCornerShape(
+                                        (1 - previewerState.decorationAlpha.value)
+                                            .times(400).dp
+                                    )
+                                ),
+                            painter = painter,
+                            contentScale = ContentScale.Crop,
+                            contentDescription = null,
+                        )
                     }
                 }
             }
@@ -507,7 +555,7 @@ fun CameraPictureModeRow() {
         val itemCount = 5
         val itemEmptyCount = itemCount / 2
         val itemWidth = maxWidth.div(itemCount)
-        val pictureMode = viewModel.pictureMode
+        val pictureMode = viewModel.pictureModeFlow
         val lazyListState = rememberLazyListState(PictureMode.entries.indexOf(pictureMode.value))
         val centerIndex by remember {
             derivedStateOf {
@@ -529,22 +577,15 @@ fun CameraPictureModeRow() {
             }
             PictureMode.entries.forEachIndexed { index, pictureMode ->
                 item {
-                    Text(
-                        modifier = Modifier
-                            .width(itemWidth)
-                            .padding(horizontal = Layout.padding.pxs)
-                            .clip(Layout.roundShape.rs)
-                            .clickable {
-                                scope.launch {
-                                    lazyListState.animateScrollToItem(index)
-                                }
-                            }
-                            .padding(vertical = Layout.padding.ps)
-                            .align(Alignment.Center),
-                        text = pictureMode.label,
-                        textAlign = TextAlign.Center,
-                        color = if (centerIndex == index) MaterialTheme.colorScheme.primary else LocalContentColor.current,
-                    )
+                    CameraModeTextButton(
+                        modifier = Modifier.width(itemWidth),
+                        label = pictureMode.label,
+                        selected = centerIndex == index,
+                    ) {
+                        scope.launch {
+                            lazyListState.animateScrollToItem(index)
+                        }
+                    }
                 }
             }
             items(itemEmptyCount) {
@@ -552,6 +593,25 @@ fun CameraPictureModeRow() {
             }
         }
     }
+}
+
+@Composable
+fun CameraModeTextButton(
+    modifier: Modifier = Modifier,
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Text(
+        modifier = modifier
+            .padding(horizontal = Layout.padding.pxs)
+            .clip(Layout.roundShape.rs)
+            .clickable { onClick() }
+            .padding(vertical = Layout.padding.ps),
+        text = label,
+        textAlign = TextAlign.Center,
+        color = if (selected) MaterialTheme.colorScheme.primary else LocalContentColor.current,
+    )
 }
 
 @Composable

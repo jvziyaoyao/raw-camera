@@ -65,8 +65,8 @@ android {
 }
 
 dependencies {
-    implementation("org.opencv:opencv:4.9.0")
-    implementation("androidx.exifinterface:exifinterface:1.3.7")
+    api("org.opencv:opencv:4.9.0")
+    api("androidx.exifinterface:exifinterface:1.3.7")
 
     implementation(platform("androidx.compose:compose-bom:2023.08.00"))
     implementation("androidx.compose.ui:ui")

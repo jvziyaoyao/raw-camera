@@ -1,12 +1,5 @@
 package com.jvziyaoyao.raw.camera.page.camera
 
-import android.util.Log
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -19,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CenterFocusWeak
+import androidx.compose.material.icons.filled.ControlPoint
 import androidx.compose.material.icons.filled.SportsHandball
 import androidx.compose.material.icons.filled.Texture
 import androidx.compose.material.icons.filled.WbIncandescent
@@ -34,9 +28,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.jvziyaoyao.camera.raw.holder.camera.focalDistanceRange
+import com.jvziyaoyao.camera.raw.holder.camera.zoomRatioRange
 import com.jvziyaoyao.raw.camera.base.ScaleAnimatedVisibility
 import com.jvziyaoyao.raw.camera.page.wheel.CircleWheelState
 import com.jvziyaoyao.raw.camera.page.wheel.CircularItem
@@ -65,7 +59,48 @@ enum class ManualControlItem(
         label = "白平衡",
         icon = Icons.Filled.WbIncandescent,
     ),
+    ZoomRatio(
+        label = "变焦",
+        icon = Icons.Filled.ControlPoint,
+    ),
     ;
+}
+
+fun getZoomRatioWheelItems(lower: Float, upper: Float): List<CircularItem<ItemValue<Float?>>> {
+    val items = mutableListOf<CircularItem<ItemValue<Float?>>>()
+    val fullAngle = 100F
+    val numTicks = 10
+    val anglePerTick = fullAngle / numTicks
+    val innerTicks = 6
+    val innerPerTick = anglePerTick / innerTicks
+    val allWheelsValue = upper - lower
+    fun getWheelValue(angle: Double): Float {
+        return (lower + allWheelsValue.times((angle - anglePerTick).div(fullAngle))).toFloat()
+    }
+    for (i in 1..numTicks) {
+        val angle = i * anglePerTick
+        items.add(
+            CircularItem(
+                angle = angle,
+                label = if (i % 2 == 0 || i == 1) "${angle.div(10).toInt()}x" else null,
+                primary = true,
+                value = ItemValue(getWheelValue(angle.toDouble())),
+            )
+        )
+        if (i == numTicks) break
+        for (e in 1 until innerTicks) {
+            val innerAngle = angle + e * innerPerTick
+            items.add(
+                CircularItem(
+                    angle = innerAngle,
+                    label = null,
+                    primary = false,
+                    value = if (e % 2 == 0) ItemValue(getWheelValue(innerAngle.toDouble())) else null,
+                )
+            )
+        }
+    }
+    return items
 }
 
 fun getFocalDistanceWheelItems(lower: Float, upper: Float): List<CircularItem<ItemValue<Float?>>> {
@@ -346,6 +381,33 @@ fun CameraManualLayer() {
                             indicatorColor = MaterialTheme.colorScheme.primary,
                             wheelBackground = actionBackgroundColor,
                         )
+                    }
+
+                    val zoomRatioWheelState = remember {
+                        val zoomRatioRange = zoomRatioRange
+                        if (zoomRatioRange != null) {
+                            val items =
+                                getZoomRatioWheelItems(zoomRatioRange.lower, zoomRatioRange.upper)
+                            CircleWheelState(
+                                items = items,
+                                defaultItem = items.first()
+                            )
+                        } else null
+
+                    }
+                    zoomRatioWheelState?.apply {
+                        ScaleAnimatedVisibility(
+                            visible = selectedManualItem.value == ManualControlItem.ZoomRatio,
+                        ) {
+                            LaunchedEffect(currentItem.value) {
+                                viewModel.captureController.zoomRatioFlow.value = currentItem.value?.value?.value ?: 1F
+                            }
+                            HalfCircleWheel(
+                                circleWheelState = zoomRatioWheelState,
+                                indicatorColor = MaterialTheme.colorScheme.primary,
+                                wheelBackground = actionBackgroundColor,
+                            )
+                        }
                     }
                 }
             }

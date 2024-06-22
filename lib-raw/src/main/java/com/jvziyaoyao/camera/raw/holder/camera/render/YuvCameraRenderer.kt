@@ -4,13 +4,10 @@ import android.media.Image
 import android.opengl.GLSurfaceView
 import android.util.Log
 import androidx.compose.runtime.mutableStateOf
-import com.jvziyaoyao.camera.raw.R
 import com.jvziyaoyao.camera.raw.holder.camera.getHistogramData
 import com.jvziyaoyao.camera.raw.holder.camera.markOverExposedRegions
 import com.jvziyaoyao.camera.raw.holder.camera.markShapeImageRegions
 import com.jvziyaoyao.camera.raw.holder.camera.preMultiplyAlpha
-import com.jvziyaoyao.camera.raw.util.ContextUtil
-import com.jvziyaoyao.camera.raw.util.readResourceAsString
 import com.jvziyaoyao.camera.raw.util.testTime
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -73,19 +70,14 @@ class YuvCameraRenderer : CoroutineScope by MainScope() {
         glSurfaceView.setRenderer(yuvSurfaceRender)
     }
 
-    fun upDateVertex(isFrontCamera: Boolean, rotationOrientation: Int) {
-        var nextTextureVertex = when (rotationOrientation) {
-            0 -> TEX_VERTEX_MAT_0
-            90 -> TEX_VERTEX_MAT_90
-            180 -> TEX_VERTEX_MAT_180
-            270 -> TEX_VERTEX_MAT_270
-            else -> TEX_VERTEX_MAT_90
-        }
-        if (isFrontCamera) nextTextureVertex =
-            vertexHorizontalFlip(nextTextureVertex)
+    fun updateVertex(isFrontCamera: Boolean, rotationOrientation: Int) {
+        val nextTextureVertex = getCameraFacingVertex(isFrontCamera, rotationOrientation)
+        updateVertex(nextTextureVertex)
+    }
 
+    fun updateVertex(textureVertex: FloatArray) {
         yuvSurfaceRender.currentYuvData = null
-        yuvSurfaceRender.updateTextureBuffer(nextTextureVertex)
+        yuvSurfaceRender.updateTextureBuffer(textureVertex)
     }
 
     fun setupRenderer() {

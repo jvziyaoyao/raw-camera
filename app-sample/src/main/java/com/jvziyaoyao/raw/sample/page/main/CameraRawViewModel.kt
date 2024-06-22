@@ -20,7 +20,8 @@ import com.jvziyaoyao.camera.raw.holder.camera.isFrontCamera
 import com.jvziyaoyao.camera.raw.holder.camera.off.getGLFilterBitmapAsync
 import com.jvziyaoyao.camera.raw.holder.camera.render.YuvCameraPreviewer
 import com.jvziyaoyao.camera.raw.holder.camera.render.YuvCameraRenderer
-import com.jvziyaoyao.camera.raw.holder.camera.render.imageFilterReplacement
+import com.jvziyaoyao.camera.raw.holder.camera.render.getCameraFacingVertex
+import com.jvziyaoyao.camera.raw.holder.camera.render.isEmptyImageFilter
 import com.jvziyaoyao.camera.raw.holder.camera.resizeMat
 import com.jvziyaoyao.camera.raw.holder.camera.toMat
 import com.jvziyaoyao.camera.raw.holder.sensor.SensorFlow
@@ -176,8 +177,8 @@ class CameraRawViewModel : ViewModel() {
     val displayRotation
         get() = cameraFlow.displayRotation
 
-    val rotationOrientation
-        get() = cameraFlow.rotationOrientation
+    val rotationOrientationFlow
+        get() = cameraFlow.rotationOrientationFlow
 
     private fun getStoragePath(): File {
         val picturesFile =
@@ -207,9 +208,10 @@ class CameraRawViewModel : ViewModel() {
         cameraFlow.setupCamera()
         yuvCameraRenderer.setupRenderer()
 
+        // 更新画面渲染顶点
         viewModelScope.launch(Dispatchers.IO) {
             combine(
-                rotationOrientation,
+                rotationOrientationFlow,
                 // 等相机启动有画面了再设置顶点
                 cameraFlow.cameraDeviceFlow,
             ) { p0, p1 -> Pair(p0, p1) }.collectLatest { pair ->
@@ -217,11 +219,17 @@ class CameraRawViewModel : ViewModel() {
                 val currentCameraPair = cameraFlow.currentCameraPairFlow.value
                 if (currentCameraPair != null) {
                     val isFrontCamera = currentCameraPair.second.isFrontCamera
-                    yuvCameraRenderer.upDateVertex(isFrontCamera, rotationOrientation)
+                    val nextTextureVertex =
+                        getCameraFacingVertex(isFrontCamera, rotationOrientation)
+                    yuvCameraRenderer.updateVertex(nextTextureVertex)
+
+                    filterRendererMatFlow.value = null
+                    textureVertexFlow.value = nextTextureVertex
                 }
             }
         }
 
+        // 传递滤镜预览图
         viewModelScope.launch(Dispatchers.IO) {
             yuvCameraRenderer.yuvDataFlow.collectLatest { yuvData ->
                 yuvData?.let {
@@ -253,8 +261,6 @@ class CameraRawViewModel : ViewModel() {
         }
     }
 
-    val filterRendererMatFlow = MutableStateFlow<Mat?>(null)
-
     fun releaseCamera() {
         cameraFlow.release()
         yuvCameraRenderer.release()
@@ -276,9 +282,9 @@ class CameraRawViewModel : ViewModel() {
         // 滤镜当前仅支持JPEG
         if (outputItem.outputMode == OutputMode.JPEG) {
             val imageFilter = currentImageFilterFlow.value
-            if (!imageFilter.isNullOrEmpty() && imageFilter != imageFilterReplacement) {
+            if (!imageFilter.isEmptyImageFilter()) {
                 saveBitmapWithExif(outputFile, outputFile) { bitmap ->
-                    getGLFilterBitmapAsync(context, imageFilter, bitmap)
+                    getGLFilterBitmapAsync(context, imageFilter!!, bitmap)
                 }
             }
         }
@@ -326,6 +332,10 @@ class CameraRawViewModel : ViewModel() {
      * 滤镜相关
      *
      */
+
+    val filterRendererMatFlow = MutableStateFlow<Mat?>(null)
+
+    val textureVertexFlow = MutableStateFlow<FloatArray?>(null)
 
     val imageFilterList by lazy { defaultImageFilterList }
 

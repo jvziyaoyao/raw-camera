@@ -81,6 +81,19 @@ fun vertexHorizontalFlip(vertexArray: FloatArray): FloatArray {
     return nextVertex
 }
 
+fun getCameraFacingVertex(isFrontCamera: Boolean, rotationOrientation: Int): FloatArray {
+    var nextTextureVertex = when (rotationOrientation) {
+        0 -> TEX_VERTEX_MAT_0
+        90 -> TEX_VERTEX_MAT_90
+        180 -> TEX_VERTEX_MAT_180
+        270 -> TEX_VERTEX_MAT_270
+        else -> TEX_VERTEX_MAT_90
+    }
+    if (isFrontCamera) nextTextureVertex =
+        vertexHorizontalFlip(nextTextureVertex)
+    return nextTextureVertex
+}
+
 data class YUVRenderData(
     val width: Int,
     val height: Int,
@@ -89,7 +102,15 @@ data class YUVRenderData(
     val vByteArray: ByteBuffer,
 )
 
-const val imageFilterReplacement = "void imageFilter(inout vec4 color) {}"
+internal const val imageFilterReplacement = "void imageFilter(inout vec4 color) {}"
+
+fun String.isDefaultEmptyImageFilter(): Boolean {
+    return this == imageFilterReplacement
+}
+
+fun String?.isEmptyImageFilter(): Boolean {
+    return this.isNullOrEmpty() || isDefaultEmptyImageFilter()
+}
 
 class YuvSurfaceRenderer(
     private var textureVertex: FloatArray = TEX_VERTEX_MAT_0,

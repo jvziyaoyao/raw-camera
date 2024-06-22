@@ -91,7 +91,7 @@ import com.jvziyaoyao.camera.raw.holder.camera.outputSupportedMode
 import com.jvziyaoyao.camera.raw.holder.camera.rectFromNormalized
 import com.jvziyaoyao.camera.raw.holder.camera.rectNormalized
 import com.jvziyaoyao.camera.raw.holder.camera.render.TEX_VERTEX_MAT_90
-import com.jvziyaoyao.camera.raw.holder.camera.render.imageFilterReplacement
+import com.jvziyaoyao.camera.raw.holder.camera.render.isEmptyImageFilter
 import com.jvziyaoyao.camera.raw.holder.camera.sceneMode
 import com.jvziyaoyao.camera.raw.holder.camera.sceneModes
 import com.jvziyaoyao.camera.raw.holder.camera.sensorAspectRatio
@@ -371,7 +371,7 @@ fun CameraRawPreviewLayer(
                                 afRegions?.forEach { meteringRectangle ->
                                     val rect = sensorDetectRect2ComposeRect(
                                         rect = meteringRectangle.rect,
-                                        rotationOrientation = viewModel.rotationOrientation.value,
+                                        rotationOrientation = viewModel.rotationOrientationFlow.value,
                                         flipHorizontal = cameraCharacteristics.isFrontCamera,
                                         size = size,
                                         sensorWidth = sensorWidth,
@@ -401,7 +401,7 @@ fun CameraRawPreviewLayer(
                                 aeRegions?.forEach { meteringRectangle ->
                                     val rect = sensorDetectRect2ComposeRect(
                                         rect = meteringRectangle.rect,
-                                        rotationOrientation = viewModel.rotationOrientation.value,
+                                        rotationOrientation = viewModel.rotationOrientationFlow.value,
                                         flipHorizontal = cameraCharacteristics.isFrontCamera,
                                         size = size,
                                         sensorWidth = sensorWidth,
@@ -430,7 +430,7 @@ fun CameraRawPreviewLayer(
                                 awbRegions?.forEach { meteringRectangle ->
                                     val rect = sensorDetectRect2ComposeRect(
                                         rect = meteringRectangle.rect,
-                                        rotationOrientation = viewModel.rotationOrientation.value,
+                                        rotationOrientation = viewModel.rotationOrientationFlow.value,
                                         flipHorizontal = cameraCharacteristics.isFrontCamera,
                                         size = size,
                                         sensorWidth = sensorWidth,
@@ -458,7 +458,7 @@ fun CameraRawPreviewLayer(
                                 faceDetectResult?.forEach {
                                     val faceRect = sensorDetectRect2ComposeRect(
                                         rect = it.bounds,
-                                        rotationOrientation = viewModel.rotationOrientation.value,
+                                        rotationOrientation = viewModel.rotationOrientationFlow.value,
                                         flipHorizontal = cameraCharacteristics.isFrontCamera,
                                         size = size,
                                         sensorWidth = sensorWidth,
@@ -595,8 +595,9 @@ fun CameraRawActionLayer(
                     horizontalArrangement = Arrangement.spacedBy(Layout.padding.ps),
                 ) {
                     val currentImageFilterStr = viewModel.currentImageFilterFlow.collectAsState()
+                    val textureVertex = viewModel.textureVertexFlow.collectAsState()
                     viewModel.imageFilterList.forEach { imageFilter ->
-                        val isEmptyImageFilter = imageFilter.shaderStr == imageFilterReplacement
+                        val isEmptyImageFilter = imageFilter.shaderStr.isEmptyImageFilter()
                         val selected = if (isEmptyImageFilter) {
                             currentImageFilterStr.value == null || currentImageFilterStr.value == imageFilter.shaderStr
                         } else {
@@ -604,6 +605,11 @@ fun CameraRawActionLayer(
                         }
                         val imageFilterRenderer = remember {
                             ImageFilterRenderer(TEX_VERTEX_MAT_90, imageFilter.shaderStr)
+                        }
+                        LaunchedEffect(textureVertex.value) {
+                            textureVertex.value?.let {
+                                imageFilterRenderer.updateTextureBuffer(it)
+                            }
                         }
 
                         Box(

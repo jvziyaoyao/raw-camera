@@ -1,5 +1,8 @@
 package com.jvziyaoyao.raw.camera.page.camera
 
+import android.graphics.BitmapFactory
+import android.graphics.ImageFormat
+import android.graphics.YuvImage
 import android.hardware.camera2.CameraMetadata
 import android.opengl.GLSurfaceView
 import android.os.Environment
@@ -11,17 +14,30 @@ import androidx.compose.ui.geometry.Rect
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.jvziyaoyao.camera.raw.holder.camera.CameraFlow
+import com.jvziyaoyao.camera.raw.holder.camera.OutputMode
 import com.jvziyaoyao.camera.raw.holder.camera.chooseDefaultCameraPair
+import com.jvziyaoyao.camera.raw.holder.camera.filter.defaultImageFilterList
 import com.jvziyaoyao.camera.raw.holder.camera.isFrontCamera
+import com.jvziyaoyao.camera.raw.holder.camera.off.getGLFilterBitmapAsync
 import com.jvziyaoyao.camera.raw.holder.camera.render.YuvCameraPreviewer
 import com.jvziyaoyao.camera.raw.holder.camera.render.YuvCameraRenderer
+import com.jvziyaoyao.camera.raw.holder.camera.render.getCameraFacingVertex
+import com.jvziyaoyao.camera.raw.holder.camera.render.isEmptyImageFilter
+import com.jvziyaoyao.camera.raw.holder.camera.resizeMat
+import com.jvziyaoyao.camera.raw.holder.camera.toMat
 import com.jvziyaoyao.camera.raw.holder.sensor.SensorFlow
+import com.jvziyaoyao.camera.raw.util.ContextUtil
+import com.jvziyaoyao.camera.raw.util.saveBitmapWithExif
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import org.opencv.core.Mat
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.nio.ByteBuffer
 
 enum class PictureMode(
     val label: String,
@@ -75,7 +91,7 @@ class CameraViewModel : ViewModel() {
 
     private lateinit var cameraFlow: CameraFlow
 
-    private lateinit var cameraRenderer: YuvCameraRenderer
+    private lateinit var yuvCameraRenderer: YuvCameraRenderer
 
     private lateinit var cameraPreviewer: YuvCameraPreviewer
 
@@ -105,24 +121,24 @@ class CameraViewModel : ViewModel() {
     // 画面渲染
 
     val exposureHistogramDataFlow
-        get() = cameraRenderer.exposureHistogramDataFlow
+        get() = yuvCameraRenderer.exposureHistogramDataFlow
 
     val focusPeakingEnableFlow
-        get() = cameraRenderer.focusPeakingEnableFlow
+        get() = yuvCameraRenderer.focusPeakingEnableFlow
 
     val brightnessPeakingEnableFlow
-        get() = cameraRenderer.brightnessPeakingEnableFlow
+        get() = yuvCameraRenderer.brightnessPeakingEnableFlow
 
     val exposureHistogramEnableFlow
-        get() = cameraRenderer.exposureHistogramEnableFlow
+        get() = yuvCameraRenderer.exposureHistogramEnableFlow
 
     // 性能相关
 
     val captureFrameRate
-        get() = cameraRenderer.captureFrameRate
+        get() = yuvCameraRenderer.captureFrameRate
 
     val rendererFrameRate
-        get() = cameraRenderer.rendererFrameRate
+        get() = yuvCameraRenderer.rendererFrameRate
 
     // 屏幕旋转
 
@@ -130,7 +146,7 @@ class CameraViewModel : ViewModel() {
         get() = cameraFlow.displayRotation
 
     val rotationOrientation
-        get() = cameraFlow.rotationOrientation
+        get() = cameraFlow.rotationOrientationFlow
 
     val focusRequestTriggerFlow
         get() = captureController.focusRequestTriggerFlow
@@ -148,9 +164,9 @@ class CameraViewModel : ViewModel() {
     fun setupCamera(
         displayRotation: Int,
     ) {
-        cameraRenderer = YuvCameraRenderer()
+        yuvCameraRenderer = YuvCameraRenderer()
         cameraPreviewer = YuvCameraPreviewer { image ->
-            cameraRenderer.processImage(image)
+            yuvCameraRenderer.processImage(image)
         }
         cameraFlow = CameraFlow(
             handler = handler,
@@ -161,7 +177,7 @@ class CameraViewModel : ViewModel() {
         )
 
         cameraFlow.setupCamera()
-        cameraRenderer.setupRenderer()
+        yuvCameraRenderer.setupRenderer()
 
         viewModelScope.launch {
             combine(
@@ -173,7 +189,12 @@ class CameraViewModel : ViewModel() {
                 val currentCameraPair = cameraFlow.currentCameraPairFlow.value
                 if (currentCameraPair != null) {
                     val isFrontCamera = currentCameraPair.second.isFrontCamera
-                    cameraRenderer.upDateVertex(isFrontCamera, rotationOrientation)
+                    val nextTextureVertex =
+                        getCameraFacingVertex(isFrontCamera, rotationOrientation)
+                    yuvCameraRenderer.updateVertex(nextTextureVertex)
+
+                    filterRendererMatFlow.value = null
+                    textureVertexFlow.value = nextTextureVertex
                 }
             }
         }
@@ -188,16 +209,64 @@ class CameraViewModel : ViewModel() {
                 }
             }
         }
+
+        // 传图给滤镜列表
+        viewModelScope.launch(Dispatchers.IO) {
+            yuvCameraRenderer.yuvDataFlow.collectLatest { yuvData ->
+                if (showFilterList.value) {
+                    yuvData?.let {
+                        val yByteArray = it.yByteArray.duplicate()
+                        val vByteArray = it.vByteArray.duplicate()
+                        yByteArray.clear()
+                        vByteArray.clear()
+                        val width = it.width
+                        val height = it.height
+
+                        val buffer = ByteBuffer.allocate(
+                            yByteArray.remaining() + vByteArray.remaining()
+                        )
+                        buffer.put(yByteArray)
+                        buffer.put(vByteArray)
+                        val yuvImage =
+                            YuvImage(buffer.array(), ImageFormat.NV21, width, height, null)
+                        val out = ByteArrayOutputStream()
+                        yuvImage.compressToJpeg(
+                            android.graphics.Rect(0, 0, width, height), 50, out
+                        )
+                        val imageBytes = out.toByteArray()
+                        val bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+                        val mat = bitmap.toMat()
+                        filterRendererMatFlow.value =
+                            resizeMat(mat, mat.width().div(4), mat.height().div(4))
+                    }
+                }
+            }
+        }
+
+        // 相机切换回自动模式后设置曝光参数为自动
+        viewModelScope.launch(Dispatchers.IO) {
+            pictureModeFlow.collectLatest {
+                if (it != PictureMode.Manual) {
+                    captureController.sensorExposureTimeFlow.value = null
+                    captureController.sensorSensitivityFlow.value = null
+                    captureController.focalDistanceFlow.value = null
+                    captureController.customTemperatureFlow.value = null
+                    captureController.zoomRatioFlow.value = 1F
+                }
+            }
+        }
     }
 
     fun releaseCamera() {
         cameraFlow.release()
-        cameraRenderer.release()
+        yuvCameraRenderer.release()
     }
 
-    fun setSurfaceView(glSurfaceView: GLSurfaceView) = cameraRenderer.setSurfaceView(glSurfaceView)
+    fun setSurfaceView(glSurfaceView: GLSurfaceView) =
+        yuvCameraRenderer.setSurfaceView(glSurfaceView)
 
     suspend fun capture() {
+        val context = ContextUtil.getApplicationByReflect()
         val outputItem = cameraFlow.currentOutputItemFlow.value ?: return
         val extName = outputItem.outputMode.extName
         val time = System.currentTimeMillis()
@@ -206,6 +275,15 @@ class CameraViewModel : ViewModel() {
             outputFile,
             additionalRotation = saveImageOrientation.value,
         )
+        // 滤镜当前仅支持JPEG
+        if (outputItem.outputMode == OutputMode.JPEG) {
+            val imageFilter = currentImageFilterFlow.value
+            if (!imageFilter.isEmptyImageFilter()) {
+                saveBitmapWithExif(outputFile, outputFile) { bitmap ->
+                    getGLFilterBitmapAsync(context, imageFilter!!, bitmap)
+                }
+            }
+        }
         // 刷新图片
         fetchImages()
     }
@@ -216,13 +294,30 @@ class CameraViewModel : ViewModel() {
 
     fun resumeCamera() {
         cameraFlow.resume()
-        cameraRenderer.resume()
+        yuvCameraRenderer.resume()
     }
 
     fun pauseCamera() {
         cameraFlow.pause()
-        cameraRenderer.pause()
+        yuvCameraRenderer.pause()
     }
+
+    /**
+     *
+     * 滤镜相关
+     *
+     */
+
+    val showFilterList = mutableStateOf(false)
+
+    val textureVertexFlow = MutableStateFlow<FloatArray?>(null)
+
+    val filterRendererMatFlow = MutableStateFlow<Mat?>(null)
+
+    val imageFilterList by lazy { defaultImageFilterList }
+
+    val currentImageFilterFlow
+        get() = yuvCameraRenderer.currentImageFilterFlow
 
     /**
      *
@@ -230,7 +325,7 @@ class CameraViewModel : ViewModel() {
      *
      */
 
-    val pictureMode = mutableStateOf(PictureMode.Manual)
+    val pictureModeFlow = MutableStateFlow(PictureMode.Manual)
 
     val captureLoading = mutableStateOf(false)
 
