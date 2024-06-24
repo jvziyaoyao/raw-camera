@@ -5,9 +5,9 @@ import android.graphics.ImageFormat
 import android.graphics.YuvImage
 import android.hardware.camera2.CameraMetadata
 import android.opengl.GLSurfaceView
-import android.os.Environment
 import android.os.Handler
 import android.os.HandlerThread
+import android.util.Log
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.geometry.Rect
@@ -28,6 +28,8 @@ import com.jvziyaoyao.camera.raw.holder.camera.toMat
 import com.jvziyaoyao.camera.raw.holder.sensor.SensorFlow
 import com.jvziyaoyao.camera.raw.util.ContextUtil
 import com.jvziyaoyao.camera.raw.util.saveBitmapWithExif
+import com.jvziyaoyao.raw.camera.domain.model.MediaQueryEntity
+import com.jvziyaoyao.raw.camera.domain.repository.ImageRepo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -51,7 +53,9 @@ enum class PictureMode(
     ;
 }
 
-class CameraViewModel : ViewModel() {
+class CameraViewModel(
+    private val imageRepo: ImageRepo,
+) : ViewModel() {
 
     /**
      *
@@ -151,14 +155,6 @@ class CameraViewModel : ViewModel() {
     val focusRequestTriggerFlow
         get() = captureController.focusRequestTriggerFlow
 
-    private fun getStoragePath(): File {
-        val picturesFile =
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES).absoluteFile
-        val storageFile = File(picturesFile, "yao")
-        if (!storageFile.exists()) storageFile.mkdirs()
-        return storageFile
-    }
-
     fun onPermissionChanged(allGranted: Boolean) = cameraFlow.onPermissionChanged(allGranted)
 
     fun setupCamera(
@@ -202,6 +198,7 @@ class CameraViewModel : ViewModel() {
         // 控制Camera启停
         viewModelScope.launch {
             previewerVisibleTarget.collectLatest { v ->
+                Log.i("TAG", "setupCamera: previewerVisibleTarget $v")
                 if (v == true) {
                     pauseCamera()
                 } else if (v == false) {
@@ -243,6 +240,16 @@ class CameraViewModel : ViewModel() {
             }
         }
 
+        // 除了JPEG意外其他模式不支持滤镜
+        viewModelScope.launch(Dispatchers.IO) {
+            currentOutputItemFlow.collectLatest {
+                if (it?.outputMode != OutputMode.JPEG) {
+                    currentImageFilterFlow.value = imageFilterList.first().shaderStr
+                    showFilterList.value = false
+                }
+            }
+        }
+
         // 相机切换回自动模式后设置曝光参数为自动
         viewModelScope.launch(Dispatchers.IO) {
             pictureModeFlow.collectLatest {
@@ -270,7 +277,8 @@ class CameraViewModel : ViewModel() {
         val outputItem = cameraFlow.currentOutputItemFlow.value ?: return
         val extName = outputItem.outputMode.extName
         val time = System.currentTimeMillis()
-        val outputFile = File(getStoragePath(), "YAO_$time.$extName")
+        val name = "YAO_$time"
+        val outputFile = File(storagePath, "$name.$extName")
         cameraFlow.capture(
             outputFile,
             additionalRotation = saveImageOrientation.value,
@@ -284,6 +292,7 @@ class CameraViewModel : ViewModel() {
                 }
             }
         }
+
         // 刷新图片
         fetchImages()
     }
@@ -367,15 +376,16 @@ class CameraViewModel : ViewModel() {
      *
      */
 
+    private val storagePath
+        get() = imageRepo.storagePath
+
+    val imageList
+        get() = imageRepo.imageList
+
     val previewerVisibleTarget = MutableStateFlow<Boolean?>(false)
 
-    val imagesFileList = mutableStateListOf<File>()
+    fun fetchImages() = imageRepo.fetchImages()
 
-    fun fetchImages() {
-        val yaoDirectory = getStoragePath()
-        val fileList = yaoDirectory.listFiles()?.toList()?.reversed() ?: emptyList()
-        imagesFileList.clear()
-        imagesFileList.addAll(fileList)
-    }
+    fun deleteImage(mediaQueryEntity: MediaQueryEntity) = imageRepo.deleteImage(mediaQueryEntity)
 
 }

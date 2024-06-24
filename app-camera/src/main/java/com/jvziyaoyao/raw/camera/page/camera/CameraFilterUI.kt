@@ -24,7 +24,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -116,7 +115,7 @@ fun CameraFilterLayer() {
                             Text(
                                 text = imageFilter.name,
                                 fontSize = Layout.fontSize.fxxs,
-                                color = MaterialTheme.colorScheme.onBackground.copy(0.4F)
+                                color = MaterialTheme.colorScheme.onBackground.copy(0.8F)
                             )
                         }
                     }

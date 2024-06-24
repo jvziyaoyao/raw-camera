@@ -53,7 +53,7 @@ dependencies {
     implementation(project(":lib-raw"))
 
 //    implementation("com.github.jvziyaoyao:ImageViewer:feat-zoomable-SNAPSHOT")
-    implementation("com.jvziyaoyao.scale:image-viewer:1.1.0-alpha.3")
+    implementation("com.jvziyaoyao.scale:image-viewer:1.1.0-alpha.4")
 //    implementation("com.jvziyaoyao.scaler:image-viewer:1.1.0-test.5")
 //    implementation("com.github.jvziyaoyao:ImageViewer:1.1.0-alpha.1")
 //    implementation("com.github.jvziyaoyao:ImageViewer:1.0.2-alpha.8")
@@ -67,7 +67,6 @@ dependencies {
 
     val accompanist_version = "0.24.1-alpha"
     implementation("com.google.accompanist:accompanist-systemuicontroller:$accompanist_version")
-    implementation("com.google.accompanist:accompanist-insets:$accompanist_version")
     implementation("com.google.accompanist:accompanist-permissions:$accompanist_version")
     implementation("com.google.accompanist:accompanist-drawablepainter:$accompanist_version")
     implementation("com.google.accompanist:accompanist-webview:$accompanist_version")

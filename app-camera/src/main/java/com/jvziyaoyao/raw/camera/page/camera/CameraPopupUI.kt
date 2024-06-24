@@ -61,7 +61,7 @@ fun CameraSettingActionSheet() {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(0.54F)
+                .fillMaxHeight(0.44F)
                 .clip(Layout.roundShape.rl)
                 .background(MaterialTheme.colorScheme.background)
                 .padding(

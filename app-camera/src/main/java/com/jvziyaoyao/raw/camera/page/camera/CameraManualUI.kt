@@ -1,5 +1,6 @@
 package com.jvziyaoyao.raw.camera.page.camera
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -77,12 +78,35 @@ fun getZoomRatioWheelItems(lower: Float, upper: Float): List<CircularItem<ItemVa
     fun getWheelValue(angle: Double): Float {
         return (lower + allWheelsValue.times((angle - anglePerTick).div(fullAngle))).toFloat()
     }
-    for (i in 1..numTicks) {
+
+    val angle = 0F
+    items.add(
+        CircularItem(
+            angle = angle,
+            label = "1x",
+            primary = true,
+            value = ItemValue(1F),
+        )
+    )
+    val per = 1F.div(6)
+    for (e in 1 until 12) {
+        val innerAngle = angle + e * innerPerTick
+        items.add(
+            CircularItem(
+                angle = innerAngle,
+                label = null,
+                primary = false,
+                value = if (e % 2 == 0) ItemValue(1F + e.div(2).times(per)) else null,
+            )
+        )
+    }
+
+    for (i in 2..numTicks) {
         val angle = i * anglePerTick
         items.add(
             CircularItem(
                 angle = angle,
-                label = if (i % 2 == 0 || i == 1) "${angle.div(10).toInt()}x" else null,
+                label = if (i % 2 == 0) "${i}x" else null,
                 primary = true,
                 value = ItemValue(getWheelValue(angle.toDouble())),
             )
@@ -400,7 +424,8 @@ fun CameraManualLayer() {
                             visible = selectedManualItem.value == ManualControlItem.ZoomRatio,
                         ) {
                             LaunchedEffect(currentItem.value) {
-                                viewModel.captureController.zoomRatioFlow.value = currentItem.value?.value?.value ?: 1F
+                                viewModel.captureController.zoomRatioFlow.value =
+                                    currentItem.value?.value?.value ?: 1F
                             }
                             HalfCircleWheel(
                                 circleWheelState = zoomRatioWheelState,

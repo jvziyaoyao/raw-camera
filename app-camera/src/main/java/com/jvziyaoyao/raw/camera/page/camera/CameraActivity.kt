@@ -100,6 +100,7 @@ import com.jvziyaoyao.scale.zoomable.previewer.TransformItemView
 import com.jvziyaoyao.scale.zoomable.previewer.VerticalDragType
 import com.jvziyaoyao.scale.zoomable.previewer.rememberPreviewerState
 import com.jvziyaoyao.scale.zoomable.previewer.rememberTransformItemState
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.androidx.viewmodel.ext.android.viewModel
@@ -166,14 +167,20 @@ fun CameraBody() {
     val viewModel: CameraViewModel = koinViewModel()
     CameraPopup()
 
-    val images = viewModel.imagesFileList
+    val images = viewModel.imageList
     val previewerState = rememberPreviewerState(
         verticalDragType = VerticalDragType.Down,
         pageCount = { images.size },
-        getKey = { images[it].absolutePath },
+        getKey = { images[it].path!! },
     )
     LaunchedEffect(previewerState.visibleTarget) {
         viewModel.previewerVisibleTarget.value = previewerState.visibleTarget
+    }
+    LaunchedEffect(images.size) {
+        if (images.isNotEmpty()) {
+            delay(2000)
+            previewerState.enterTransform(0)
+        }
     }
 
     Column(
@@ -458,14 +465,14 @@ fun CameraActionFooter(
                 }
             }
         ) {
-            viewModel.imagesFileList.apply {
+            viewModel.imageList.apply {
                 if (isNotEmpty()) {
-                    val imageFile = first()
-                    val painter = rememberCoilImagePainter(image = imageFile)
+                    val image = first()
+                    val painter = rememberCoilImagePainter(image = image.path!!)
                     val itemState =
                         rememberTransformItemState(intrinsicSize = painter.intrinsicSize)
                     TransformItemView(
-                        key = imageFile.absolutePath,
+                        key = image.path!!,
                         itemState = itemState,
                         transformState = previewerState,
                     ) {
