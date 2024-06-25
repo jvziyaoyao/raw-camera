@@ -176,12 +176,12 @@ fun CameraBody() {
     LaunchedEffect(previewerState.visibleTarget) {
         viewModel.previewerVisibleTarget.value = previewerState.visibleTarget
     }
-    LaunchedEffect(images.size) {
-        if (images.isNotEmpty()) {
-            delay(2000)
-            previewerState.enterTransform(0)
-        }
-    }
+//    LaunchedEffect(images.size) {
+//        if (images.isNotEmpty()) {
+//            delay(2000)
+//            previewerState.enterTransform(0)
+//        }
+//    }
 
     Column(
         modifier = Modifier
@@ -257,7 +257,13 @@ fun CameraBody() {
         Spacer(modifier = Modifier.navigationBarsPadding())
     }
 
-    CameraPreviewer(images = images, previewerState = previewerState)
+    CameraPreviewer(
+        images = images,
+        previewerState = previewerState,
+        onDelete = {
+            viewModel.deleteImage(it)
+        },
+    )
 }
 
 enum class FlashLightMode(

@@ -16,12 +16,15 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -38,6 +41,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
@@ -223,5 +227,50 @@ fun ConfirmView(
                 }
             }
         }
+    }
+}
+
+@Composable
+fun MainButton(
+    onClick: () -> Unit,
+    content: @Composable RowScope.() -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .clip(CircleShape)
+            .clickable {
+                onClick()
+            }
+            .padding(horizontal = Layout.padding.pm, vertical = Layout.padding.ps),
+    ) {
+        content()
+    }
+}
+
+@Composable
+fun RowScope.ForegroundTabMenuItem(
+    icon: ImageVector,
+    label: String,
+    color: Color,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .weight(1F)
+            .padding(horizontal = Layout.padding.pxs)
+            .clip(Layout.roundShape.rxl)
+            .clickable {
+                onClick()
+            }
+            .padding(vertical = Layout.padding.ps),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = color,
+        )
+        Text(text = label, fontSize = Layout.fontSize.fxxs, color = color)
     }
 }

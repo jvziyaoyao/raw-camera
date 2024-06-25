@@ -8,6 +8,7 @@ import android.util.Log
 import androidx.compose.runtime.mutableStateListOf
 import com.jvziyaoyao.camera.raw.util.ContextUtil
 import com.jvziyaoyao.raw.camera.domain.model.MediaQueryEntity
+import kotlinx.coroutines.flow.MutableStateFlow
 import java.io.File
 
 class ImageRepo {
@@ -24,6 +25,7 @@ class ImageRepo {
 
     fun deleteImage(mediaQueryEntity: MediaQueryEntity) {
         imageList.remove(mediaQueryEntity)
+        // TODO 这里要做真正的删除
     }
 
     fun fetchImages() {

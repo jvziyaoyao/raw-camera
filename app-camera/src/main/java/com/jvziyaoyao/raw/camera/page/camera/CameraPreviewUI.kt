@@ -1,6 +1,7 @@
 package com.jvziyaoyao.raw.camera.page.camera
 
 import android.annotation.SuppressLint
+import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -56,10 +57,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import com.jvziyaoyao.raw.camera.base.FlatActionSheet
+import com.jvziyaoyao.raw.camera.base.ForegroundTabMenuItem
 import com.jvziyaoyao.raw.camera.base.LocalPopupState
 import com.jvziyaoyao.raw.camera.base.rememberCoilImagePainter
 import com.jvziyaoyao.raw.camera.domain.model.Exif
 import com.jvziyaoyao.raw.camera.domain.model.MediaQueryEntity
+import com.jvziyaoyao.raw.camera.page.image.ImageActivity
 import com.jvziyaoyao.raw.camera.ui.theme.Layout
 import com.jvziyaoyao.raw.camera.util.findWindow
 import com.jvziyaoyao.raw.camera.util.hideSystemUI
@@ -70,6 +73,10 @@ import com.jvziyaoyao.scale.zoomable.pager.PagerGestureScope
 import com.jvziyaoyao.scale.zoomable.previewer.Previewer
 import com.jvziyaoyao.scale.zoomable.previewer.PreviewerState
 import com.jvziyaoyao.scale.zoomable.previewer.TransformLayerScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -85,7 +92,10 @@ fun CameraPreviewer(
     val context = LocalContext.current
     val window = context.findWindow()
     var showDetail by rememberSaveable { mutableStateOf(false) }
+
     var showDelete by rememberSaveable { mutableStateOf(false) }
+    val deleteConfirm = remember { MutableStateFlow<Boolean?>(null) }
+
     val fullScreen = remember { mutableStateOf(false) }
     if (previewerState.canClose || previewerState.animating || showDetail || showDelete) {
         BackHandler {
@@ -131,7 +141,23 @@ fun CameraPreviewer(
                         shareItems(context, listOf(images[previewerState.currentPage]))
                     },
                     onDelete = {
-                        showDelete = true
+                        scope.launch {
+                            showDelete = true
+                            deleteConfirm.value = null
+                            deleteConfirm.takeWhile { it == null }.collectLatest { }
+                            val confirm = deleteConfirm.value
+                            if (confirm == true) {
+                                onDelete(images[previewerState.currentPage])
+                            }
+                            showDelete = false
+                        }
+                    },
+                    onAll = {
+                        context.startActivity(Intent(context, ImageActivity::class.java))
+                        scope.launch {
+                            delay(2000)
+                            previewerState.exitTransform()
+                        }
                     },
                     onBack = {
                         scope.launch {
@@ -186,10 +212,10 @@ fun CameraPreviewer(
         DeleteView(
             visible = showDelete,
             confirm = {
-
+                deleteConfirm.value = true
             },
             cancel = {
-                showDelete = false
+                deleteConfirm.value = false
             },
         )
     }
@@ -358,34 +384,6 @@ fun ForegroundTab(
                 onDelete()
             }
         }
-    }
-}
-
-@Composable
-fun RowScope.ForegroundTabMenuItem(
-    icon: ImageVector,
-    label: String,
-    color: Color,
-    onClick: () -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .weight(1F)
-            .padding(horizontal = Layout.padding.pxs)
-            .clip(Layout.roundShape.rxl)
-            .clickable {
-                onClick()
-            }
-            .padding(vertical = Layout.padding.ps),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = color,
-        )
-        Text(text = label, fontSize = Layout.fontSize.fxxs, color = color)
     }
 }
 

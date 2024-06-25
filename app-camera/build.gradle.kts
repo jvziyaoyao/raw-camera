@@ -60,6 +60,8 @@ dependencies {
 
     implementation("io.coil-kt:coil:2.4.0")
     implementation("io.coil-kt:coil-svg:2.4.0")
+    implementation("io.coil-kt:coil-gif:2.4.0")
+    implementation("io.coil-kt:coil-video:2.4.0")
     implementation("io.coil-kt:coil-compose:2.4.0")
 
     // https://mvnrepository.com/artifact/androidx.compose.material/material-icons-extended

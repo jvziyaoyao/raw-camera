@@ -198,7 +198,7 @@ class CameraViewModel(
         // 控制Camera启停
         viewModelScope.launch {
             previewerVisibleTarget.collectLatest { v ->
-                Log.i("TAG", "setupCamera: previewerVisibleTarget $v")
+                // TODO 点击相册离开页面后相机仍然运行
                 if (v == true) {
                     pauseCamera()
                 } else if (v == false) {
