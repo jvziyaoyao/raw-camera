@@ -8,7 +8,6 @@ import android.opengl.GLSurfaceView
 import android.os.Handler
 import android.os.HandlerThread
 import android.util.Log
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.geometry.Rect
 import androidx.lifecycle.ViewModel
@@ -56,6 +55,25 @@ enum class PictureMode(
 class CameraViewModel(
     private val imageRepo: ImageRepo,
 ) : ViewModel() {
+
+
+    /**
+     *
+     * 启动相关
+     *
+     */
+
+    private val resumeTimestampFlow = MutableStateFlow<Long?>(null)
+
+    private val cameraResumeTimestampFlow = MutableStateFlow<Long?>(null)
+
+    fun resume() {
+        resumeTimestampFlow.value = System.currentTimeMillis()
+    }
+
+    fun pause() {
+        resumeTimestampFlow.value = null
+    }
 
     /**
      *
@@ -197,12 +215,34 @@ class CameraViewModel(
 
         // 控制Camera启停
         viewModelScope.launch {
-            previewerVisibleTarget.collectLatest { v ->
-                // TODO 点击相册离开页面后相机仍然运行
-                if (v == true) {
-                    pauseCamera()
-                } else if (v == false) {
+            combine(
+                resumeTimestampFlow,
+                previewerVisibleTargetFlow
+            ) { p01, p02 -> Pair(p01, p02) }.collectLatest { pair ->
+                val (resumeTimestamp, visibleTarget) = pair
+                if (resumeTimestamp != null) {
+                    if (visibleTarget == true) {
+                        cameraResumeTimestampFlow.value = null
+                    } else if (visibleTarget == false) {
+                        cameraResumeTimestampFlow.value = resumeTimestamp
+                    } else if (cameraResumeTimestampFlow.value == null && previewerVisibleFlow.value != true) {
+                        cameraResumeTimestampFlow.value = resumeTimestamp
+                    }
+                } else {
+                    cameraResumeTimestampFlow.value = null
+                }
+            }
+        }
+
+        // 控制Camera启停
+        viewModelScope.launch {
+            cameraResumeTimestampFlow.collectLatest {
+                if (it != null) {
+                    startSensor()
                     resumeCamera()
+                } else {
+                    stopSensor()
+                    pauseCamera()
                 }
             }
         }
@@ -382,7 +422,9 @@ class CameraViewModel(
     val imageList
         get() = imageRepo.imageList
 
-    val previewerVisibleTarget = MutableStateFlow<Boolean?>(false)
+    val previewerVisibleFlow = MutableStateFlow<Boolean?>(false)
+
+    val previewerVisibleTargetFlow = MutableStateFlow<Boolean?>(false)
 
     fun fetchImages() = imageRepo.fetchImages()
 

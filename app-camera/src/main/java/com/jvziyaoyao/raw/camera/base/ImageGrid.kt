@@ -154,6 +154,8 @@ fun ImageGrid(
                             CheckButton(
                                 check = selected,
                                 key = path,
+                                checkColor = MaterialTheme.colorScheme.primary,
+                                uncheckColor = MaterialTheme.colorScheme.surface,
                                 modifier = Modifier
                                     .size(32.dp)
                                     .padding(top = 4.dp, end = 4.dp)

@@ -32,9 +32,11 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -48,6 +50,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.jvziyaoyao.raw.camera.base.BaseActivity
+import com.jvziyaoyao.raw.camera.base.CameraCommonPreviewer
 import com.jvziyaoyao.raw.camera.base.CheckButton
 import com.jvziyaoyao.raw.camera.base.DynamicStatusBarColor
 import com.jvziyaoyao.raw.camera.base.EditorBar
@@ -60,7 +63,9 @@ import com.jvziyaoyao.raw.camera.domain.model.CameraPhotoEntity
 import com.jvziyaoyao.raw.camera.domain.model.MediaQueryEntity
 import com.jvziyaoyao.raw.camera.ui.theme.Layout
 import com.jvziyaoyao.raw.camera.util.shareItems
+import com.jvziyaoyao.scale.zoomable.previewer.LocalTransformItemStateMap
 import com.jvziyaoyao.scale.zoomable.previewer.PreviewerState
+import com.jvziyaoyao.scale.zoomable.previewer.TransformItemState
 import com.jvziyaoyao.scale.zoomable.previewer.VerticalDragType
 import com.jvziyaoyao.scale.zoomable.previewer.rememberPreviewerState
 import kotlinx.coroutines.Dispatchers
@@ -76,11 +81,14 @@ class ImageActivity : BaseActivity() {
         super.onCreate(savedInstanceState)
         setBasicContent {
             DynamicStatusBarColor(dark = false)
-            ImageBody(
-                onBack = {
-                    finish()
-                }
-            )
+            val transformItemStateMap = remember { mutableStateMapOf<Any, TransformItemState>() }
+            CompositionLocalProvider(LocalTransformItemStateMap provides transformItemStateMap) {
+                ImageBody(
+                    onBack = {
+                        finish()
+                    }
+                )
+            }
         }
 
         launch(Dispatchers.IO) {
@@ -180,7 +188,11 @@ fun ImageBody(
                     selectedMap = selectedMap as Map<String, MediaQueryEntity>,
                     selectedMode = selectedMode,
                     previewerState = previewerState,
-                    onPreview = { },
+                    onPreview = {
+                        scope.launch {
+                            previewerState.enterTransform(previewList.indexOf(it))
+                        }
+                    },
                     onSelected = { list ->
                         selectedItems(list)
                     },
@@ -223,6 +235,14 @@ fun ImageBody(
                 }
             }
         }
+
+        CameraCommonPreviewer(
+            images = previewList,
+            previewerState = previewerState,
+            onDelete = {
+
+            },
+        )
     }
 }
 

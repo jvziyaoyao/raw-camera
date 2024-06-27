@@ -1,5 +1,6 @@
 package com.jvziyaoyao.raw.camera.page.camera
 
+import android.content.Intent
 import android.opengl.GLSurfaceView
 import android.os.Build
 import android.os.Bundle
@@ -70,10 +71,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntSize
@@ -86,12 +89,14 @@ import com.jvziyaoyao.camera.raw.holder.camera.defaultSensorAspectRatio
 import com.jvziyaoyao.camera.raw.holder.camera.render.isEmptyImageFilter
 import com.jvziyaoyao.camera.raw.holder.camera.sensorAspectRatio
 import com.jvziyaoyao.raw.camera.base.BaseActivity
+import com.jvziyaoyao.raw.camera.base.CameraCommonPreviewer
 import com.jvziyaoyao.raw.camera.base.CommonPermissions
 import com.jvziyaoyao.raw.camera.base.DynamicStatusBarColor
 import com.jvziyaoyao.raw.camera.base.FadeAnimatedVisibility
 import com.jvziyaoyao.raw.camera.base.ScaleAnimatedVisibility
 import com.jvziyaoyao.raw.camera.base.animateRotationAsState
 import com.jvziyaoyao.raw.camera.base.rememberCoilImagePainter
+import com.jvziyaoyao.raw.camera.page.image.ImageActivity
 import com.jvziyaoyao.raw.camera.page.wheel.LocalVibratorHelper
 import com.jvziyaoyao.raw.camera.page.wheel.VibratorHelper
 import com.jvziyaoyao.raw.camera.ui.theme.Layout
@@ -100,7 +105,10 @@ import com.jvziyaoyao.scale.zoomable.previewer.TransformItemView
 import com.jvziyaoyao.scale.zoomable.previewer.VerticalDragType
 import com.jvziyaoyao.scale.zoomable.previewer.rememberPreviewerState
 import com.jvziyaoyao.scale.zoomable.previewer.rememberTransformItemState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.androidx.viewmodel.ext.android.viewModel
@@ -150,38 +158,36 @@ class CameraActivity : BaseActivity() {
 
     override fun onResume() {
         super.onResume()
-        mViewModel.startSensor()
-        mViewModel.resumeCamera()
+        mViewModel.resume()
     }
 
     override fun onPause() {
         super.onPause()
-        mViewModel.stopSensor()
-        mViewModel.pauseCamera()
+        mViewModel.pause()
     }
 
 }
 
 @Composable
 fun CameraBody() {
+    val context = LocalContext.current
     val viewModel: CameraViewModel = koinViewModel()
     CameraPopup()
 
+    val scope = rememberCoroutineScope()
     val images = viewModel.imageList
     val previewerState = rememberPreviewerState(
         verticalDragType = VerticalDragType.Down,
         pageCount = { images.size },
         getKey = { images[it].path!! },
     )
-    LaunchedEffect(previewerState.visibleTarget) {
-        viewModel.previewerVisibleTarget.value = previewerState.visibleTarget
+    LaunchedEffect(previewerState.visible) {
+        viewModel.previewerVisibleFlow.value = previewerState.visible
     }
-//    LaunchedEffect(images.size) {
-//        if (images.isNotEmpty()) {
-//            delay(2000)
-//            previewerState.enterTransform(0)
-//        }
-//    }
+    LaunchedEffect(previewerState.visibleTarget) {
+        viewModel.previewerVisibleTargetFlow.value = previewerState.visibleTarget
+    }
+
 
     Column(
         modifier = Modifier
@@ -257,13 +263,33 @@ fun CameraBody() {
         Spacer(modifier = Modifier.navigationBarsPadding())
     }
 
-    CameraPreviewer(
+    CameraCommonPreviewer(
         images = images,
         previewerState = previewerState,
         onDelete = {
             viewModel.deleteImage(it)
         },
+        endOfNav = {
+            Text(
+                modifier = Modifier
+                    .clip(Layout.roundShape.rs)
+                    .clickable {
+                        context.startActivity(Intent(context, ImageActivity::class.java))
+                        MainScope().launch(Dispatchers.IO) {
+                            delay(1000)
+                            previewerState.close()
+                        }
+                    }
+                    .padding(
+                        horizontal = Layout.padding.pm,
+                        vertical = Layout.padding.ps,
+                    ),
+                text = "全部图片",
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
     )
+
 }
 
 enum class FlashLightMode(
@@ -418,6 +444,8 @@ fun CameraActionFooter(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceAround,
     ) {
+        val sideCircleSize = 48.dp
+
         @Composable
         fun SideCircleWrap(
             onClick: () -> Unit,
@@ -425,9 +453,9 @@ fun CameraActionFooter(
         ) {
             Box(
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(sideCircleSize)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.onBackground.copy(0.2F))
+                    .background(MaterialTheme.colorScheme.surface)
                     .clickable(
                         onClick = onClick,
                     )
@@ -464,41 +492,51 @@ fun CameraActionFooter(
                 }
             }
         )
-        SideCircleWrap(
-            onClick = {
-                scope.launch {
-                    previewerState.enterTransform(0)
+
+        val latestImage by remember {
+            derivedStateOf {
+                viewModel.imageList.run {
+                    if (isNotEmpty()) first() else null
                 }
             }
-        ) {
-            viewModel.imageList.apply {
-                if (isNotEmpty()) {
-                    val image = first()
-                    val painter = rememberCoilImagePainter(image = image.path!!)
-                    val itemState =
-                        rememberTransformItemState(intrinsicSize = painter.intrinsicSize)
-                    TransformItemView(
-                        key = image.path!!,
-                        itemState = itemState,
-                        transformState = previewerState,
+        }
+        Box(modifier = Modifier.size(sideCircleSize)) {
+            latestImage?.apply {
+                val painter = rememberCoilImagePainter(image = path!!)
+                FadeAnimatedVisibility(visible = painter.intrinsicSize.isSpecified) {
+                    SideCircleWrap(
+                        onClick = {
+                            scope.launch {
+                                previewerState.enterTransform(0)
+                            }
+                        }
                     ) {
-                        Image(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clip(
-                                    RoundedCornerShape(
-                                        (1 - previewerState.decorationAlpha.value)
-                                            .times(400).dp
-                                    )
-                                ),
-                            painter = painter,
-                            contentScale = ContentScale.Crop,
-                            contentDescription = null,
-                        )
+                        val itemState =
+                            rememberTransformItemState(intrinsicSize = painter.intrinsicSize)
+                        TransformItemView(
+                            key = path!!,
+                            itemState = itemState,
+                            transformState = previewerState,
+                        ) {
+                            Image(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(
+                                        RoundedCornerShape(
+                                            (1 - previewerState.decorationAlpha.value)
+                                                .times(400).dp
+                                        )
+                                    ),
+                                painter = painter,
+                                contentScale = ContentScale.Crop,
+                                contentDescription = null,
+                            )
+                        }
                     }
                 }
             }
         }
+
     }
 }
 
@@ -522,7 +560,7 @@ fun CameraCaptureButton(
                     .fillMaxSize()
                     .align(Alignment.Center),
                 strokeWidth = borderPadding,
-                color = MaterialTheme.colorScheme.onBackground.copy(0.4F),
+                color = MaterialTheme.colorScheme.surface,
             )
         }
         AnimatedVisibility(
@@ -535,7 +573,7 @@ fun CameraCaptureButton(
                 modifier = Modifier
                     .fillMaxSize()
                     .align(Alignment.Center),
-                color = MaterialTheme.colorScheme.onBackground.copy(0.4F),
+                color = MaterialTheme.colorScheme.surface,
                 strokeWidth = borderPadding,
             )
         }
@@ -674,43 +712,6 @@ fun CameraCaptureInfoLayer() {
             val backgroundColor = MaterialTheme.colorScheme.onBackground.copy(0.4F)
             val lineColor = MaterialTheme.colorScheme.background.copy(0.6F)
 
-//            CompositionLocalProvider(LocalContentColor provides lineColor) {
-//                currentOutputItem.value?.apply {
-//                    Column(
-//                        modifier = Modifier
-//                            .clip(Layout.roundShape.rs)
-//                            .background(backgroundColor)
-//                            .clickable {
-//                                viewModel.showSetting()
-//                            }
-//                            .padding(
-//                                horizontal = Layout.padding.ps,
-//                                vertical = Layout.padding.pxs,
-//                            )
-//                    ) {
-//                        Row(
-//                            verticalAlignment = Alignment.CenterVertically,
-//                        ) {
-//                            Text(
-//                                text = outputMode.label,
-//                                color = LocalContentColor.current,
-//                                fontSize = Layout.fontSize.fs,
-//                            )
-//                            Spacer(modifier = Modifier.width(Layout.padding.pxxs))
-//                            Icon(
-//                                modifier = Modifier.size(12.dp),
-//                                imageVector = Icons.Filled.ArrowDropDown,
-//                                contentDescription = null
-//                            )
-//                        }
-//                        Text(
-//                            text = "${bestSize.width}x${bestSize.height}",
-//                            fontSize = Layout.fontSize.fxxs,
-//                            color = LocalContentColor.current.copy(0.6F),
-//                        )
-//                    }
-//                }
-//            }
             Spacer(modifier = Modifier.weight(1F))
 
             val exposureHistogramData = viewModel.exposureHistogramDataFlow.collectAsState()

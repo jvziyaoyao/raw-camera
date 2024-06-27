@@ -1,4 +1,4 @@
-package com.jvziyaoyao.raw.camera.page.camera
+package com.jvziyaoyao.raw.camera.base
 
 import android.annotation.SuppressLint
 import android.content.Intent
@@ -83,10 +83,11 @@ import java.util.Calendar
 import java.util.Date
 
 @Composable
-fun CameraPreviewer(
+fun CameraCommonPreviewer(
     images: List<MediaQueryEntity>,
     previewerState: PreviewerState,
     onDelete: (MediaQueryEntity) -> Unit,
+    endOfNav: @Composable () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -152,18 +153,12 @@ fun CameraPreviewer(
                             showDelete = false
                         }
                     },
-                    onAll = {
-                        context.startActivity(Intent(context, ImageActivity::class.java))
-                        scope.launch {
-                            delay(2000)
-                            previewerState.exitTransform()
-                        }
-                    },
                     onBack = {
                         scope.launch {
                             previewerState.exitTransform()
                         }
-                    }
+                    },
+                    end = endOfNav,
                 )
             }
         ),
@@ -230,8 +225,6 @@ private val dayDataFormatWithYear = SimpleDateFormat("yyyy年MM月dd日")
 @SuppressLint("SimpleDateFormat")
 private val dayDataFormat = SimpleDateFormat("MM月dd日")
 
-// TODO 不应该放这里
-const val DAY_LENGTH = 1000 * 60 * 60 * 24
 fun getDayLabel(timeStamp: Long): String {
     val calendar = Calendar.getInstance()
     calendar.set(Calendar.HOUR_OF_DAY, 0)
@@ -254,8 +247,8 @@ fun PreviewerForeground(
     onDetail: () -> Unit = {},
     onShare: () -> Unit = {},
     onDelete: () -> Unit = {},
-    onAll: () -> Unit = {},
     onBack: () -> Unit = {},
+    end: @Composable () -> Unit = {},
 ) {
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -274,20 +267,9 @@ fun PreviewerForeground(
             ) {
                 PreviewerForegroundNav(
                     mediaQueryEntity = mediaQueryEntity,
-                    onBack = onBack
-                ) {
-                    Text(
-                        modifier = Modifier
-                            .clip(Layout.roundShape.rs)
-                            .clickable { onAll() }
-                            .padding(
-                                horizontal = Layout.padding.pm,
-                                vertical = Layout.padding.ps,
-                            ),
-                        text = "全部图片",
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
+                    onBack = onBack,
+                    end = end,
+                )
             }
         }
 

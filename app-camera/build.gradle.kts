@@ -53,7 +53,8 @@ dependencies {
     implementation(project(":lib-raw"))
 
 //    implementation("com.github.jvziyaoyao:ImageViewer:feat-zoomable-SNAPSHOT")
-    implementation("com.jvziyaoyao.scale:image-viewer:1.1.0-alpha.4")
+//    implementation("com.jvziyaoyao.scale:image-viewer:1.1.0-alpha.4")
+    implementation("com.jvziyaoyao.scale:image-viewer:1.1.0-test.5")
 //    implementation("com.jvziyaoyao.scaler:image-viewer:1.1.0-test.5")
 //    implementation("com.github.jvziyaoyao:ImageViewer:1.1.0-alpha.1")
 //    implementation("com.github.jvziyaoyao:ImageViewer:1.0.2-alpha.8")

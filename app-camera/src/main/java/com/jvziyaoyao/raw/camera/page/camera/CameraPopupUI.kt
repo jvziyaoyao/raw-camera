@@ -70,7 +70,7 @@ fun CameraSettingActionSheet() {
                     top = Layout.padding.pl,
                 )
         ) {
-            val buttonBackground = MaterialTheme.colorScheme.onBackground.copy(0.2F)
+            val buttonBackground = MaterialTheme.colorScheme.surface
             val selectedContentColor = MaterialTheme.colorScheme.onPrimary
             val labelColor = LocalContentColor.current.copy(0.6F)
             val labelFontSize = Layout.fontSize.fxs

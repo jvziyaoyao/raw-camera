@@ -162,7 +162,7 @@ fun ConfirmView(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(MaterialTheme.shapes.medium)
+            .clip(Layout.roundShape.rm)
             .preventPointerInput()
             .background(MaterialTheme.colorScheme.surface),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -258,7 +258,7 @@ fun RowScope.ForegroundTabMenuItem(
         modifier = Modifier
             .weight(1F)
             .padding(horizontal = Layout.padding.pxs)
-            .clip(Layout.roundShape.rxl)
+            .clip(Layout.roundShape.rm)
             .clickable {
                 onClick()
             }

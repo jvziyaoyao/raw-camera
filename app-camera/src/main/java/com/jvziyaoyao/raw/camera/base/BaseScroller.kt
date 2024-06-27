@@ -227,14 +227,17 @@ fun ScrollerBar(
             AnimatedVisibility(visible = showLabelText, enter = fadeIn(), exit = fadeOut()) {
                 Box(
                     modifier = Modifier
-                        .clip(Layout.roundShape.rm)
-                        .background(MaterialTheme.colorScheme.onBackground)
-                        .padding(Layout.padding.pxs)
+                        .clip(Layout.roundShape.rs)
+                        .background(MaterialTheme.colorScheme.surface)
+                        .padding(
+                            horizontal = Layout.padding.pm,
+                            vertical = Layout.padding.pxs,
+                        )
                 ) {
                     Text(
                         text = labelText,
                         fontSize = Layout.fontSize.fs,
-                        color = MaterialTheme.colorScheme.surface
+                        color = MaterialTheme.colorScheme.onBackground
                     )
                 }
             }
@@ -242,7 +245,7 @@ fun ScrollerBar(
             Box(
                 modifier = Modifier
                     .shadow(elevation = 4.dp)
-                    .clip(MaterialTheme.shapes.medium)
+                    .clip(Layout.roundShape.rs)
                     .width(20.dp)
                     .fillMaxHeight()
                     .background(MaterialTheme.colorScheme.surface)

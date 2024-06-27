@@ -24,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -52,7 +53,7 @@ fun CameraFilterLayer() {
         ) {
             Row(
                 modifier = Modifier
-                    .background(MaterialTheme.colorScheme.background.copy(0.2F))
+                    .background(MaterialTheme.colorScheme.surface)
                     .padding(Layout.padding.ps),
                 horizontalArrangement = Arrangement.spacedBy(Layout.padding.ps),
             ) {
@@ -77,8 +78,10 @@ fun CameraFilterLayer() {
                     Box(
                         modifier = Modifier
                             .size(60.dp)
+                            .clip(Layout.roundShape.rs)
                             .border(
                                 width = 2.dp,
+                                shape = Layout.roundShape.rs,
                                 color = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
                             )
                             .clickable {
