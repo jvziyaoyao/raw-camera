@@ -1,8 +1,12 @@
 package com.jvziyaoyao.raw.camera.page.camera
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -10,11 +14,23 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.jvziyaoyao.camera.raw.holder.camera.aeCompensationRange
+import com.jvziyaoyao.camera.raw.holder.camera.aeCompensationStep
+import com.jvziyaoyao.camera.raw.holder.camera.zoomRatioRange
+import com.jvziyaoyao.raw.camera.base.FadeAnimatedVisibility
+import com.jvziyaoyao.raw.camera.base.ScaleAnimatedVisibility
+import com.jvziyaoyao.raw.camera.page.wheel.CircleWheelState
+import com.jvziyaoyao.raw.camera.page.wheel.HalfCircleWheel
 import com.jvziyaoyao.raw.camera.ui.theme.Layout
 import com.jvziyaoyao.raw.camera.util.formatToDecimalPlaces
 import org.koin.androidx.compose.koinViewModel
@@ -23,25 +39,148 @@ import org.koin.androidx.compose.koinViewModel
 fun CameraNormalLayer() {
     val viewModel: CameraViewModel = koinViewModel()
     val zoomRatio = viewModel.captureController.zoomRatioFlow.collectAsState()
+    val aeCompensation = viewModel.captureController.aeCompensationFlow.collectAsState()
 
     Box(
         modifier = Modifier
             .fillMaxSize()
     ) {
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = Layout.padding.pl)
-                .size(40.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.onBackground.copy(0.4F))
-        ) {
-            Text(
-                modifier = Modifier.align(Alignment.Center),
-                text = "${zoomRatio.value.formatToDecimalPlaces(1)}X",
-                fontSize = Layout.fontSize.fxs,
-                color = MaterialTheme.colorScheme.background.copy(0.6F),
-            )
+
+        val actionBackgroundColor = MaterialTheme.colorScheme.background.copy(0.2F)
+        val currentCharacteristic =
+            viewModel.currentCameraCharacteristicsFlow.collectAsState(initial = null)
+        currentCharacteristic.value?.apply {
+
+            val showZoomRatioWheel = remember { mutableStateOf(false) }
+            val showAeCompensationWheel = remember { mutableStateOf(false) }
+
+            FadeAnimatedVisibility(
+                visible = !showZoomRatioWheel.value && !showAeCompensationWheel.value
+            ) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    Box(
+                        modifier = Modifier
+                            .padding(bottom = Layout.padding.pm)
+                            .align(Alignment.BottomCenter),
+                    ) {
+                        CircleLabelText(
+                            label = "${zoomRatio.value.formatToDecimalPlaces(1)}X",
+                            onClick = { showZoomRatioWheel.value = true },
+                        )
+                    }
+                }
+            }
+
+            val zoomRatioWheelState = remember {
+                val zoomRatioRange = zoomRatioRange
+                if (zoomRatioRange != null) {
+                    val items =
+                        getZoomRatioWheelItems(zoomRatioRange.lower, zoomRatioRange.upper)
+                    CircleWheelState(
+                        items = items,
+                        defaultItem = items.first()
+                    )
+                } else null
+
+            }
+            zoomRatioWheelState?.apply {
+                ScaleAnimatedVisibility(
+                    visible = showZoomRatioWheel.value,
+                ) {
+                    BackHandler {
+                        showZoomRatioWheel.value = false
+                    }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .pointerInput(Unit) {
+                                detectTapGestures {
+                                    showZoomRatioWheel.value = false
+                                }
+                            },
+                        contentAlignment = Alignment.BottomCenter
+                    ) {
+                        LaunchedEffect(currentItem.value) {
+                            viewModel.captureController.zoomRatioFlow.value =
+                                currentItem.value?.value?.value ?: 1F
+                        }
+                        HalfCircleWheel(
+                            circleWheelState = zoomRatioWheelState,
+                            indicatorColor = MaterialTheme.colorScheme.primary,
+                            wheelBackground = actionBackgroundColor,
+                        )
+                    }
+                }
+            }
+
+            val aeCompensationWheelState = remember(aeCompensationRange) {
+                if (aeCompensationRange != null && aeCompensationStep != null) {
+                    val items =
+                        getEvWheelItems(
+                            aeCompensationRange!!.lower,
+                            aeCompensationRange!!.upper,
+                            aeCompensationStep!!
+                        )
+                    val defaultItem = items.findLast { it.value?.value == 0 }
+                    CircleWheelState(
+                        items = items,
+                        defaultItem = defaultItem,
+                    )
+                } else null
+
+            }
+            aeCompensationWheelState?.apply {
+                ScaleAnimatedVisibility(
+                    visible = showAeCompensationWheel.value,
+                ) {
+                    BackHandler {
+                        showAeCompensationWheel.value = false
+                    }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .pointerInput(Unit) {
+                                detectTapGestures {
+                                    showAeCompensationWheel.value = false
+                                }
+                            },
+                        contentAlignment = Alignment.BottomCenter
+                    ) {
+                        LaunchedEffect(currentItem.value) {
+                            viewModel.captureController.aeCompensationFlow.value =
+                                currentItem.value?.value?.value ?: 0
+                        }
+                        HalfCircleWheel(
+                            circleWheelState = aeCompensationWheelState,
+                            indicatorColor = MaterialTheme.colorScheme.primary,
+                            wheelBackground = actionBackgroundColor,
+                        )
+                    }
+                }
+            }
         }
+    }
+}
+
+@Composable
+fun CircleLabelText(
+    modifier: Modifier = Modifier,
+    label: String,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = modifier
+            .size(40.dp)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.background.copy(0.36F))
+            .clickable { onClick() }
+    ) {
+        Text(
+            modifier = Modifier.align(Alignment.Center),
+            text = label,
+            fontSize = Layout.fontSize.fxs,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
+        )
     }
 }

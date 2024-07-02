@@ -78,6 +78,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -661,6 +662,7 @@ fun CameraModeTextButton(
             .padding(vertical = Layout.padding.ps),
         text = label,
         textAlign = TextAlign.Center,
+        fontWeight = FontWeight.Medium,
         color = if (selected) MaterialTheme.colorScheme.primary else LocalContentColor.current,
     )
 }

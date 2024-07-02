@@ -240,14 +240,16 @@ class CaptureController {
                 "setCurrentCaptureParams: focusRequestTriggerFlow ${focusRequestTriggerFlow.value}"
             )
             focusRequestTriggerFlow.value?.apply {
+                if (focusRect != null) {
+                    val meteringRectangle =
+                        MeteringRectangle(focusRect, MeteringRectangle.METERING_WEIGHT_MAX)
+                    set(CaptureRequest.CONTROL_AF_REGIONS, arrayOf(meteringRectangle))
+                    set(CaptureRequest.CONTROL_AE_REGIONS, arrayOf(meteringRectangle))
+                    set(CaptureRequest.CONTROL_AWB_REGIONS, arrayOf(meteringRectangle))
+                }
+                // 取消曝光锁定
+                set(CaptureRequest.CONTROL_AE_LOCK, false)
                 if (focusRequest) {
-                    if (focusRect != null) {
-                        val meteringRectangle =
-                            MeteringRectangle(focusRect, MeteringRectangle.METERING_WEIGHT_MAX)
-                        set(CaptureRequest.CONTROL_AF_REGIONS, arrayOf(meteringRectangle))
-                        set(CaptureRequest.CONTROL_AE_REGIONS, arrayOf(meteringRectangle))
-                        set(CaptureRequest.CONTROL_AWB_REGIONS, arrayOf(meteringRectangle))
-                    }
                     set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO)
                     if (trigger) {
                         set(
@@ -259,6 +261,9 @@ class CaptureController {
                             CameraMetadata.CONTROL_AE_PRECAPTURE_TRIGGER_START
                         )
                     }
+                } else {
+                    // 曝光锁定，对焦成功后拖动曝光补偿时防止重复测光
+                    set(CaptureRequest.CONTROL_AE_LOCK, true)
                 }
                 if (focusCancel) {
                     if (trigger) {

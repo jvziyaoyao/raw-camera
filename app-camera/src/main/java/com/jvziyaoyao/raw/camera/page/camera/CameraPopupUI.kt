@@ -127,7 +127,7 @@ fun CameraSettingActionSheet() {
                                     Text(
                                         text = "${outputItem.bestSize.width}x${outputItem.bestSize.height}",
                                         fontSize = Layout.fontSize.fxs,
-                                        color = contentColor.copy(0.6F)
+                                        color = contentColor
                                     )
                                 }
                             }

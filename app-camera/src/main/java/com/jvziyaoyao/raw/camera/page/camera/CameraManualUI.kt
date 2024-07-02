@@ -1,6 +1,7 @@
 package com.jvziyaoyao.raw.camera.page.camera
 
 import android.util.Log
+import android.util.Rational
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -65,6 +66,51 @@ enum class ManualControlItem(
         icon = Icons.Filled.ControlPoint,
     ),
     ;
+}
+
+fun getEvWheelItems(lower: Int, upper: Int, step: Rational): List<CircularItem<ItemValue<Int>>> {
+    val items = mutableListOf<CircularItem<ItemValue<Int>>>()
+    val degreeStep = 1.2F
+
+    var angle = 0F
+    var value = lower
+
+    for (i in lower..upper) {
+        val actualValue = calculateActualExposureCompensation(value, step).toInt()
+        val primary = i % 3 == 0
+        val label = if (i % 6 == 0) "${if (value > 0) "+" else ""}$actualValue" else null
+        items.add(
+            CircularItem(
+                angle = angle,
+                label = label,
+                primary = primary,
+                value = ItemValue(value),
+            )
+        )
+        if (i == upper) break
+
+        angle += degreeStep
+
+        items.add(
+            CircularItem(
+                angle = angle,
+                label = null,
+                primary = false,
+                value = null,
+            )
+        )
+
+        angle += degreeStep
+        value += 1
+    }
+
+
+    Log.i("TAG", "CameraNormalLayer getEvWheelItems: $items")
+    return items
+}
+
+fun calculateActualExposureCompensation(compensationValue: Int, step: Rational): Float {
+    return compensationValue * (step.numerator.toFloat() / step.denominator.toFloat())
 }
 
 fun getZoomRatioWheelItems(lower: Float, upper: Float): List<CircularItem<ItemValue<Float?>>> {

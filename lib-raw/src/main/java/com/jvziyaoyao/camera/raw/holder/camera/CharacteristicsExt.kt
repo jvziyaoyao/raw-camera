@@ -7,6 +7,7 @@ import android.hardware.camera2.params.StreamConfigurationMap
 import android.os.Build
 import android.util.Log
 import android.util.Range
+import android.util.Rational
 import android.util.Size
 import java.util.Arrays
 
@@ -87,6 +88,9 @@ val CameraCharacteristics.outputSupportedMode: List<OutputItem>
 
 val CameraCharacteristics.aeCompensationRange: Range<Int>?
     get() = this[CameraCharacteristics.CONTROL_AE_COMPENSATION_RANGE]
+
+val CameraCharacteristics.aeCompensationStep: Rational?
+    get() = this[CameraCharacteristics.CONTROL_AE_COMPENSATION_STEP]
 
 val CameraCharacteristics.minimumFocusDistance: Float?
     get() = this[CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE]

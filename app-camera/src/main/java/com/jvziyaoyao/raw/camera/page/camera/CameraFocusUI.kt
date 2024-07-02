@@ -12,11 +12,16 @@ import androidx.compose.foundation.gestures.calculateCentroidSize
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateRotation
 import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.WbSunny
@@ -26,6 +31,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -47,6 +53,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastAny
+import com.jvziyaoyao.camera.raw.holder.camera.aeCompensationRange
 import com.jvziyaoyao.camera.raw.holder.camera.aeState
 import com.jvziyaoyao.camera.raw.holder.camera.afState
 import com.jvziyaoyao.camera.raw.holder.camera.getFingerPointRect
@@ -162,6 +169,7 @@ fun CameraFocusLayer() {
             viewModel.currentCameraCharacteristicsFlow.collectAsState(initial = null)
         val zoomRatio = viewModel.captureController.zoomRatioFlow.collectAsState()
         val focusRequestTrigger = viewModel.focusRequestTriggerFlow.collectAsState()
+        val captureController = viewModel.captureController
         LaunchedEffect(captureResult.value) {
             afLockedState.value =
                 captureResult.value?.afState == CameraMetadata.CONTROL_AF_STATE_FOCUSED_LOCKED
@@ -284,28 +292,73 @@ fun CameraFocusLayer() {
                         )
                 )
 
-                val iconSize = 20.dp
-                val iconAlpha =
-                    animateFloatAsState(targetValue = if (aeLockedState.value) 1F else 0.4F)
-                Icon(
-                    modifier = Modifier
-                        .size(iconSize)
-                        .graphicsLayer {
-                            translationX = if (pointRect.center.x < maxWidthPx.div(2)) {
-                                pointRect.right + 20F
-                            } else {
-                                pointRect.left - 20F - density.run { iconSize.toPx() }
+                characteristics.value?.apply {
+                    density.run {
+                        val iconSize = 20.dp
+                        val iconAlpha =
+                            animateFloatAsState(targetValue = if (aeLockedState.value) 1F else 0.4F)
+                        val trackerHeight = pointRect.height.times(1.4F)
+                        val trackerLimit = trackerHeight.div(2)
+                        Box(
+                            modifier = Modifier
+                                .graphicsLayer {
+                                    translationX = if (pointRect.center.x < maxWidthPx.div(2)) {
+                                        pointRect.right + 20F
+                                    } else {
+                                        pointRect.left - 20F - density.run { iconSize.toPx() }
+                                    }
+                                    translationY =
+                                        pointRect.top + pointRect.height.div(2) - trackerHeight.div(
+                                            2
+                                        )
+                                }
+                                .width(iconSize)
+                                .height(trackerHeight.toDp())
+                        ) {
+                            val offsetY = remember(pointRect) { mutableStateOf(0F) }
+                            if (offsetY.value != 0F) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxHeight()
+                                        .width(2.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.primary.copy(0.24F))
+                                        .align(Alignment.Center)
+                                )
                             }
-                            translationY =
-                                pointRect.top + pointRect.height.div(2) - density
-                                    .run { iconSize.toPx() }
-                                    .div(2)
-                            alpha = iconAlpha.value
-                        },
-                    imageVector = Icons.Filled.WbSunny,
-                    tint = MaterialTheme.colorScheme.primary,
-                    contentDescription = null
-                )
+                            Icon(
+                                modifier = Modifier
+                                    .size(iconSize)
+                                    .align(Alignment.Center)
+                                    .graphicsLayer {
+                                        translationY = offsetY.value
+                                        alpha = iconAlpha.value
+                                    }
+                                    .pointerInput(pointRect) {
+                                        detectVerticalDragGestures { _, dragAmount ->
+                                            var nextOffset = offsetY.value + dragAmount.div(4)
+                                            if (nextOffset > trackerLimit) nextOffset = trackerLimit
+                                            if (nextOffset < -trackerLimit) nextOffset =
+                                                -trackerLimit
+                                            offsetY.value = nextOffset
+
+                                            aeCompensationRange?.apply {
+                                                val ratio = nextOffset.div(trackerLimit)
+                                                val nextCompensation =
+                                                    if (ratio >= 0) upper.times(ratio)
+                                                    else lower.times(-ratio)
+                                                captureController.aeCompensationFlow.value =
+                                                    nextCompensation.toInt()
+                                            }
+                                        }
+                                    },
+                                imageVector = Icons.Filled.WbSunny,
+                                tint = MaterialTheme.colorScheme.primary,
+                                contentDescription = null
+                            )
+                        }
+                    }
+                }
             }
         }
     }

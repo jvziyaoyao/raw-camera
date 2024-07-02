@@ -337,9 +337,19 @@ class CameraViewModel(
         fetchImages()
     }
 
-    fun focusCancel() = cameraFlow.focusCancel()
+    fun focusCancel() {
+        // 曝光补偿设置回 0
+        captureController.aeCompensationFlow.value = 0
+        // 取消对焦
+        cameraFlow.focusCancel()
+    }
 
-    fun focusRequest(rect: Rect) = cameraFlow.focusRequest(rect)
+    fun focusRequest(rect: Rect) {
+        // 曝光补偿设置回 0
+        captureController.aeCompensationFlow.value = 0
+        // 开始对焦
+        cameraFlow.focusRequest(rect)
+    }
 
     fun resumeCamera() {
         cameraFlow.resume()
@@ -374,7 +384,7 @@ class CameraViewModel(
      *
      */
 
-    val pictureModeFlow = MutableStateFlow(PictureMode.Manual)
+    val pictureModeFlow = MutableStateFlow(PictureMode.Normal)
 
     val captureLoading = mutableStateOf(false)
 
