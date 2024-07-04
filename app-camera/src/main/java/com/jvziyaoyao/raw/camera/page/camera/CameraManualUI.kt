@@ -2,8 +2,10 @@ package com.jvziyaoyao.raw.camera.page.camera
 
 import android.util.Log
 import android.util.Rational
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -31,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import com.jvziyaoyao.camera.raw.holder.camera.focalDistanceRange
 import com.jvziyaoyao.camera.raw.holder.camera.zoomRatioRange
 import com.jvziyaoyao.raw.camera.base.ScaleAnimatedVisibility
@@ -38,7 +41,9 @@ import com.jvziyaoyao.raw.camera.page.wheel.CircleWheelState
 import com.jvziyaoyao.raw.camera.page.wheel.CircularItem
 import com.jvziyaoyao.raw.camera.page.wheel.HalfCircleWheel
 import com.jvziyaoyao.raw.camera.page.wheel.ItemValue
+import com.jvziyaoyao.raw.camera.page.wheel.findCircularItemByValue
 import com.jvziyaoyao.raw.camera.ui.theme.Layout
+import com.jvziyaoyao.raw.camera.util.preventPointerInput
 import org.koin.androidx.compose.koinViewModel
 
 enum class ManualControlItem(
@@ -115,61 +120,72 @@ fun calculateActualExposureCompensation(compensationValue: Int, step: Rational):
 
 fun getZoomRatioWheelItems(lower: Float, upper: Float): List<CircularItem<ItemValue<Float?>>> {
     val items = mutableListOf<CircularItem<ItemValue<Float?>>>()
-    val fullAngle = 100F
-    val numTicks = 10
-    val anglePerTick = fullAngle / numTicks
-    val innerTicks = 6
-    val innerPerTick = anglePerTick / innerTicks
-    val allWheelsValue = upper - lower
-    fun getWheelValue(angle: Double): Float {
-        return (lower + allWheelsValue.times((angle - anglePerTick).div(fullAngle))).toFloat()
-    }
 
-    val angle = 0F
+    val perTickAngle = 1.2F
+    var angle = 0F
+    var value = 1F
     items.add(
         CircularItem(
             angle = angle,
             label = "1x",
             primary = true,
-            value = ItemValue(1F),
+            value = ItemValue(value),
         )
     )
-    val per = 1F.div(6)
-    for (e in 1 until 12) {
-        val innerAngle = angle + e * innerPerTick
+
+    var full = 12
+    var perTickValue = 1F / full
+    for (i in 1..full) {
+        angle += perTickAngle
+
         items.add(
             CircularItem(
-                angle = innerAngle,
+                angle = angle,
                 label = null,
                 primary = false,
-                value = if (e % 2 == 0) ItemValue(1F + e.div(2).times(per)) else null,
+                value = null,
+            )
+        )
+
+        angle += perTickAngle
+        value += perTickValue
+
+        items.add(
+            CircularItem(
+                angle = angle,
+                label = if (i == full) "2x" else null,
+                primary = i % full.div(2) == 0,
+                value = ItemValue(value),
             )
         )
     }
 
-    for (i in 2..numTicks) {
-        val angle = i * anglePerTick
-        items.add(
-            CircularItem(
-                angle = angle,
-                label = if (i % 2 == 0) "${i}x" else null,
-                primary = true,
-                value = ItemValue(getWheelValue(angle.toDouble())),
-            )
-        )
-        if (i == numTicks) break
-        for (e in 1 until innerTicks) {
-            val innerAngle = angle + e * innerPerTick
+    full = 6
+    perTickValue = 1F / full
+    for (i in 2 until upper.toInt()) {
+        for (k in 1..full) {
+            angle += perTickAngle
             items.add(
                 CircularItem(
-                    angle = innerAngle,
+                    angle = angle,
                     label = null,
                     primary = false,
-                    value = if (e % 2 == 0) ItemValue(getWheelValue(innerAngle.toDouble())) else null,
+                    value = null,
+                )
+            )
+            angle += perTickAngle
+            value += perTickValue
+            items.add(
+                CircularItem(
+                    angle = angle,
+                    label = if (k == full) "${i + 1}x" else null,
+                    primary = k % full == 0,
+                    value = ItemValue(value),
                 )
             )
         }
     }
+
     return items
 }
 
@@ -357,18 +373,34 @@ fun <T> getTypeWheelItems(
 @Composable
 fun CameraManualLayer() {
     val viewModel: CameraViewModel = koinViewModel()
-    Column(modifier = Modifier.fillMaxSize()) {
+    val selectedManualItem = remember { mutableStateOf<ManualControlItem?>(null) }
+    if (selectedManualItem.value != null) {
+        Box(modifier = Modifier
+            .fillMaxSize()
+            .pointerInput(Unit) {
+                detectTapGestures {
+                    selectedManualItem.value = null
+                }
+            })
+    }
+    Column(
+        modifier = Modifier.fillMaxSize()
+    ) {
         Spacer(modifier = Modifier.weight(1F))
         val actionBackgroundColor = MaterialTheme.colorScheme.background.copy(0.2F)
 
         val currentCharacteristic =
             viewModel.currentCameraCharacteristicsFlow.collectAsState(initial = null)
 
-        val selectedManualItem = remember { mutableStateOf<ManualControlItem?>(null) }
+
+        BackHandler(selectedManualItem.value != null) {
+            selectedManualItem.value = null
+        }
 
         currentCharacteristic.value?.apply {
             focalDistanceRange?.let {
                 Box(modifier = Modifier.fillMaxWidth()) {
+
                     val shutterWheelState = remember {
                         val items = getTypeWheelItems(ShutterSpeedItem.entries) { it.label }
                         CircleWheelState(
@@ -454,10 +486,9 @@ fun CameraManualLayer() {
                     }
 
                     val zoomRatioWheelState = remember {
-                        val zoomRatioRange = zoomRatioRange
                         if (zoomRatioRange != null) {
                             val items =
-                                getZoomRatioWheelItems(zoomRatioRange.lower, zoomRatioRange.upper)
+                                getZoomRatioWheelItems(zoomRatioRange!!.lower, zoomRatioRange!!.upper)
                             CircleWheelState(
                                 items = items,
                                 defaultItem = items.first()
@@ -466,6 +497,15 @@ fun CameraManualLayer() {
 
                     }
                     zoomRatioWheelState?.apply {
+                        LaunchedEffect(selectedManualItem.value) {
+                            if (selectedManualItem.value == ManualControlItem.ZoomRatio) {
+                                val currentZoomRatio = viewModel.captureController.zoomRatioFlow.value
+                                findCircularItemByValue(currentZoomRatio, items)?.let {
+                                    snapToItem(it)
+                                    currentItem.value = it
+                                }
+                            }
+                        }
                         ScaleAnimatedVisibility(
                             visible = selectedManualItem.value == ManualControlItem.ZoomRatio,
                         ) {
@@ -488,6 +528,7 @@ fun CameraManualLayer() {
             modifier = Modifier
                 .fillMaxWidth()
                 .background(actionBackgroundColor)
+                .preventPointerInput()
                 .padding(horizontal = Layout.padding.pxs)
         ) {
             @Composable
@@ -504,6 +545,8 @@ fun CameraManualLayer() {
                         )
                         .clip(Layout.roundShape.rs)
                         .clickable {
+
+
                             selectedManualItem.value =
                                 if (selectedManualItem.value == manualControlItem) null
                                 else manualControlItem

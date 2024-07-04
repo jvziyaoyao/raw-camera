@@ -3,9 +3,11 @@ package com.jvziyaoyao.raw.camera.page.camera
 import android.opengl.GLSurfaceView
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.jvziyaoyao.camera.raw.holder.camera.filter.ImageFilterRenderer
@@ -41,9 +44,19 @@ import org.koin.androidx.compose.koinViewModel
 fun CameraFilterLayer() {
     val scope = rememberCoroutineScope()
     val viewModel: CameraViewModel = koinViewModel()
+    val showFilterList = viewModel.showFilterList
 
+    BackHandler {
+        showFilterList.value = false
+    }
     Box(
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier
+            .fillMaxSize()
+            .pointerInput(Unit) {
+                detectTapGestures {
+                    showFilterList.value = false
+                }
+            }
     ) {
         Box(
             modifier = Modifier

@@ -113,7 +113,12 @@ fun CameraCommonPreviewer(
             }
         }
     }
-    LaunchedEffect(key1 = fullScreen.value) {
+    LaunchedEffect(previewerState.visibleTarget) {
+        if (previewerState.visibleTarget == false && fullScreen.value) {
+            fullScreen.value = false
+        }
+    }
+    LaunchedEffect(key1 = fullScreen.value, key2 = previewerState.visibleTarget) {
         if (window == null) return@LaunchedEffect
         if (fullScreen.value) {
             hideSystemUI(window)

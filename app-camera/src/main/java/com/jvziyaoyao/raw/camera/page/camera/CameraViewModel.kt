@@ -293,12 +293,12 @@ class CameraViewModel(
         // 相机切换回自动模式后设置曝光参数为自动
         viewModelScope.launch(Dispatchers.IO) {
             pictureModeFlow.collectLatest {
+                captureController.zoomRatioFlow.value = 1F
                 if (it != PictureMode.Manual) {
                     captureController.sensorExposureTimeFlow.value = null
                     captureController.sensorSensitivityFlow.value = null
                     captureController.focalDistanceFlow.value = null
                     captureController.customTemperatureFlow.value = null
-                    captureController.zoomRatioFlow.value = 1F
                 }
             }
         }

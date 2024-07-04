@@ -529,3 +529,26 @@ fun <T> CircularScale(
     }
 
 }
+
+fun findCircularItemByValue(
+    value: Float,
+    items: List<CircularItem<ItemValue<Float?>>>
+): CircularItem<ItemValue<Float?>>? {
+    var minItem: CircularItem<ItemValue<Float?>>? = null
+    items.forEach {
+        if (minItem == null && it.value?.value != null) {
+            minItem = it
+        } else {
+            it.value?.value?.let { fl ->
+                val deltaMinItem =
+                    (value - minItem!!.value!!.value!!).absoluteValue
+                val deltaItItem =
+                    (value - fl).absoluteValue
+                if (deltaMinItem > deltaItItem) {
+                    minItem = it
+                }
+            }
+        }
+    }
+    return minItem
+}

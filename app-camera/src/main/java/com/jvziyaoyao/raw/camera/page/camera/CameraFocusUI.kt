@@ -1,7 +1,6 @@
 package com.jvziyaoyao.raw.camera.page.camera
 
 import android.hardware.camera2.CameraMetadata
-import android.util.Log
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
@@ -12,14 +11,12 @@ import androidx.compose.foundation.gestures.calculateCentroidSize
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateRotation
 import androidx.compose.foundation.gestures.calculateZoom
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -27,11 +24,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -60,8 +55,6 @@ import com.jvziyaoyao.camera.raw.holder.camera.getFingerPointRect
 import com.jvziyaoyao.camera.raw.holder.camera.rectFromNormalized
 import com.jvziyaoyao.camera.raw.holder.camera.rectNormalized
 import com.jvziyaoyao.camera.raw.holder.camera.zoomRatioRange
-import com.jvziyaoyao.raw.camera.ui.theme.Layout
-import com.jvziyaoyao.raw.camera.util.formatToDecimalPlaces
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.MainScope
@@ -343,7 +336,7 @@ fun CameraFocusLayer() {
                                             offsetY.value = nextOffset
 
                                             aeCompensationRange?.apply {
-                                                val ratio = nextOffset.div(trackerLimit)
+                                                val ratio = -nextOffset.div(trackerLimit)
                                                 val nextCompensation =
                                                     if (ratio >= 0) upper.times(ratio)
                                                     else lower.times(-ratio)

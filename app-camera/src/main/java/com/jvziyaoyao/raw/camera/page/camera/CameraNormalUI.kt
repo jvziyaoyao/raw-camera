@@ -4,9 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -24,13 +22,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.jvziyaoyao.camera.raw.holder.camera.aeCompensationRange
-import com.jvziyaoyao.camera.raw.holder.camera.aeCompensationStep
 import com.jvziyaoyao.camera.raw.holder.camera.zoomRatioRange
 import com.jvziyaoyao.raw.camera.base.FadeAnimatedVisibility
 import com.jvziyaoyao.raw.camera.base.ScaleAnimatedVisibility
 import com.jvziyaoyao.raw.camera.page.wheel.CircleWheelState
 import com.jvziyaoyao.raw.camera.page.wheel.HalfCircleWheel
+import com.jvziyaoyao.raw.camera.page.wheel.findCircularItemByValue
 import com.jvziyaoyao.raw.camera.ui.theme.Layout
 import com.jvziyaoyao.raw.camera.util.formatToDecimalPlaces
 import org.koin.androidx.compose.koinViewModel
@@ -39,23 +36,20 @@ import org.koin.androidx.compose.koinViewModel
 fun CameraNormalLayer() {
     val viewModel: CameraViewModel = koinViewModel()
     val zoomRatio = viewModel.captureController.zoomRatioFlow.collectAsState()
-    val aeCompensation = viewModel.captureController.aeCompensationFlow.collectAsState()
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-    ) {
+    val currentCharacteristic =
+        viewModel.currentCameraCharacteristicsFlow.collectAsState(initial = null)
+    currentCharacteristic.value?.apply {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+        ) {
 
-        val actionBackgroundColor = MaterialTheme.colorScheme.background.copy(0.2F)
-        val currentCharacteristic =
-            viewModel.currentCameraCharacteristicsFlow.collectAsState(initial = null)
-        currentCharacteristic.value?.apply {
-
+            val actionBackgroundColor = MaterialTheme.colorScheme.background.copy(0.2F)
             val showZoomRatioWheel = remember { mutableStateOf(false) }
-            val showAeCompensationWheel = remember { mutableStateOf(false) }
 
             FadeAnimatedVisibility(
-                visible = !showZoomRatioWheel.value && !showAeCompensationWheel.value
+                visible = !showZoomRatioWheel.value
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     Box(
@@ -65,7 +59,9 @@ fun CameraNormalLayer() {
                     ) {
                         CircleLabelText(
                             label = "${zoomRatio.value.formatToDecimalPlaces(1)}X",
-                            onClick = { showZoomRatioWheel.value = true },
+                            onClick = {
+                                showZoomRatioWheel.value = true
+                            },
                         )
                     }
                 }
@@ -81,9 +77,17 @@ fun CameraNormalLayer() {
                         defaultItem = items.first()
                     )
                 } else null
-
             }
             zoomRatioWheelState?.apply {
+                LaunchedEffect(showZoomRatioWheel.value) {
+                    if (showZoomRatioWheel.value) {
+                        val currentZoomRatio = zoomRatio.value
+                        findCircularItemByValue(currentZoomRatio, items)?.let {
+                            snapToItem(it)
+                            currentItem.value = it
+                        }
+                    }
+                }
                 ScaleAnimatedVisibility(
                     visible = showZoomRatioWheel.value,
                 ) {
@@ -106,52 +110,6 @@ fun CameraNormalLayer() {
                         }
                         HalfCircleWheel(
                             circleWheelState = zoomRatioWheelState,
-                            indicatorColor = MaterialTheme.colorScheme.primary,
-                            wheelBackground = actionBackgroundColor,
-                        )
-                    }
-                }
-            }
-
-            val aeCompensationWheelState = remember(aeCompensationRange) {
-                if (aeCompensationRange != null && aeCompensationStep != null) {
-                    val items =
-                        getEvWheelItems(
-                            aeCompensationRange!!.lower,
-                            aeCompensationRange!!.upper,
-                            aeCompensationStep!!
-                        )
-                    val defaultItem = items.findLast { it.value?.value == 0 }
-                    CircleWheelState(
-                        items = items,
-                        defaultItem = defaultItem,
-                    )
-                } else null
-
-            }
-            aeCompensationWheelState?.apply {
-                ScaleAnimatedVisibility(
-                    visible = showAeCompensationWheel.value,
-                ) {
-                    BackHandler {
-                        showAeCompensationWheel.value = false
-                    }
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .pointerInput(Unit) {
-                                detectTapGestures {
-                                    showAeCompensationWheel.value = false
-                                }
-                            },
-                        contentAlignment = Alignment.BottomCenter
-                    ) {
-                        LaunchedEffect(currentItem.value) {
-                            viewModel.captureController.aeCompensationFlow.value =
-                                currentItem.value?.value?.value ?: 0
-                        }
-                        HalfCircleWheel(
-                            circleWheelState = aeCompensationWheelState,
                             indicatorColor = MaterialTheme.colorScheme.primary,
                             wheelBackground = actionBackgroundColor,
                         )
