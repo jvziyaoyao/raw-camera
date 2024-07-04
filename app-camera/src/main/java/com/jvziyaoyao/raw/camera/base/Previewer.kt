@@ -1,7 +1,6 @@
 package com.jvziyaoyao.raw.camera.base
 
 import android.annotation.SuppressLint
-import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -17,7 +16,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -52,17 +50,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import com.jvziyaoyao.raw.camera.base.FlatActionSheet
-import com.jvziyaoyao.raw.camera.base.ForegroundTabMenuItem
-import com.jvziyaoyao.raw.camera.base.LocalPopupState
-import com.jvziyaoyao.raw.camera.base.rememberCoilImagePainter
 import com.jvziyaoyao.raw.camera.domain.model.Exif
 import com.jvziyaoyao.raw.camera.domain.model.MediaQueryEntity
-import com.jvziyaoyao.raw.camera.page.image.ImageActivity
 import com.jvziyaoyao.raw.camera.ui.theme.Layout
 import com.jvziyaoyao.raw.camera.util.findWindow
 import com.jvziyaoyao.raw.camera.util.hideSystemUI
@@ -73,7 +65,6 @@ import com.jvziyaoyao.scale.zoomable.pager.PagerGestureScope
 import com.jvziyaoyao.scale.zoomable.previewer.Previewer
 import com.jvziyaoyao.scale.zoomable.previewer.PreviewerState
 import com.jvziyaoyao.scale.zoomable.previewer.TransformLayerScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.takeWhile
@@ -393,28 +384,28 @@ fun ImageDetail(
         photoEntity.apply {
             Spacer(modifier = Modifier.height(Layout.padding.pxxl))
             if (!name.isNullOrEmpty()) ImageDetailItem(
-                label = "File",
+                label = "文件名称",
                 content = photoEntity.name!!
             )
             if (width != null && height != null) ImageDetailItem(
-                label = "Resolution",
+                label = "解析度",
                 content = "${width}×${height}"
             )
             if (!calcSize.isNullOrEmpty()) ImageDetailItem(
-                label = "File size",
+                label = "文件大小",
                 content = "$calcSize"
             )
             if (!purePath.isNullOrEmpty()) ImageDetailItem(
-                label = "Path",
+                label = "路径",
                 content = "$purePath"
             )
             Spacer(modifier = Modifier.height(Layout.padding.pxxl))
             if (!timeAddDate.isNullOrEmpty()) ImageDetailItem(
-                label = "Time",
+                label = "创建时间",
                 content = "$timeAddDate"
             )
             if (!timeModifiedDate.isNullOrEmpty()) ImageDetailItem(
-                label = "Modified",
+                label = "修改时间",
                 content = "$timeModifiedDate"
             )
         }
@@ -424,19 +415,19 @@ fun ImageDetail(
         }
         exif?.apply {
             Spacer(modifier = Modifier.height(Layout.padding.pxxl))
-            if (!make.isNullOrEmpty()) ImageDetailItem(label = "Manufacturer", content = make)
-            if (!model.isNullOrEmpty()) ImageDetailItem(label = "Model", content = model)
-            if (!flash.isNullOrEmpty()) ImageDetailItem(label = "Flash", content = flash)
+            if (!make.isNullOrEmpty()) ImageDetailItem(label = "制造商", content = make)
+            if (!model.isNullOrEmpty()) ImageDetailItem(label = "型号", content = model)
+            if (!flash.isNullOrEmpty()) ImageDetailItem(label = "闪光灯", content = flash)
             if (!focal_length.isNullOrEmpty()) ImageDetailItem(
-                label = "Focal length",
+                label = "焦距",
                 content = focal_length
             )
             if (!aperture.isNullOrEmpty()) ImageDetailItem(
-                label = "Aperture",
+                label = "光圈",
                 content = aperture
             )
             if (!exposure_time.isNullOrEmpty()) ImageDetailItem(
-                label = "Exposure time",
+                label = "曝光时间",
                 content = exposure_time
             )
             if (!iso.isNullOrEmpty()) ImageDetailItem(label = "ISO", content = iso)
@@ -462,9 +453,11 @@ fun ImageDetailItem(
             textAlign = TextAlign.End,
         )
         Spacer(modifier = Modifier.width(Layout.padding.pl))
+        val textStyle = LocalTextStyle.current
         Text(
             modifier = Modifier.weight(7F),
             text = content,
+            lineHeight = textStyle.fontSize,
         )
     }
 }

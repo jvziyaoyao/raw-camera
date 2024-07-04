@@ -494,7 +494,6 @@ fun CameraManualLayer() {
                                 defaultItem = items.first()
                             )
                         } else null
-
                     }
                     zoomRatioWheelState?.apply {
                         LaunchedEffect(selectedManualItem.value) {
