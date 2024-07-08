@@ -1,7 +1,7 @@
 package com.jvziyaoyao.raw.sample.page.sensor
 
 import androidx.lifecycle.ViewModel
-import com.jvziyaoyao.camera.raw.holder.sensor.SensorFlow
+import com.jvziyaoyao.camera.flow.holder.sensor.SensorFlow
 
 class SensorViewModel : ViewModel() {
 

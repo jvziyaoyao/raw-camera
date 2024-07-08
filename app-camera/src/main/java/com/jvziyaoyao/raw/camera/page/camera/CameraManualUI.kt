@@ -34,8 +34,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
-import com.jvziyaoyao.camera.raw.holder.camera.focalDistanceRange
-import com.jvziyaoyao.camera.raw.holder.camera.zoomRatioRange
+import com.jvziyaoyao.camera.flow.holder.camera.focalDistanceRange
+import com.jvziyaoyao.camera.flow.holder.camera.zoomRatioRange
 import com.jvziyaoyao.raw.camera.base.ScaleAnimatedVisibility
 import com.jvziyaoyao.raw.camera.page.wheel.CircleWheelState
 import com.jvziyaoyao.raw.camera.page.wheel.CircularItem

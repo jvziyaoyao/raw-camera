@@ -12,7 +12,7 @@ import coil.decode.SvgDecoder
 import coil.decode.VideoFrameDecoder
 import coil.request.ImageRequest
 import coil.size.Size
-import com.jvziyaoyao.camera.raw.util.ContextUtil
+import com.jvziyaoyao.camera.flow.util.ContextUtil
 import com.jvziyaoyao.raw.camera.R
 
 /**

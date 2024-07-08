@@ -11,7 +11,7 @@
             <option value="$PROJECT_DIR$" />
             <option value="$PROJECT_DIR$/app-camera" />
             <option value="$PROJECT_DIR$/app-sample" />
-            <option value="$PROJECT_DIR$/lib-raw" />
+            <option value="$PROJECT_DIR$/camera-flow" />
           </set>
         </option>
         <option name="resolveExternalAnnotations" value="false" />

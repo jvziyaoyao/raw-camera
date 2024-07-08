@@ -25,11 +25,11 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
-import com.jvziyaoyao.camera.raw.holder.camera.availableFaceDetectMaxCount
-import com.jvziyaoyao.camera.raw.holder.camera.faceDetectResult
-import com.jvziyaoyao.camera.raw.holder.camera.isFrontCamera
-import com.jvziyaoyao.camera.raw.holder.camera.sensorDetectRect2ComposeRect
-import com.jvziyaoyao.camera.raw.holder.camera.sensorSize
+import com.jvziyaoyao.camera.flow.holder.camera.availableFaceDetectMaxCount
+import com.jvziyaoyao.camera.flow.holder.camera.faceDetectResult
+import com.jvziyaoyao.camera.flow.holder.camera.isFrontCamera
+import com.jvziyaoyao.camera.flow.holder.camera.sensorDetectRect2ComposeRect
+import com.jvziyaoyao.camera.flow.holder.camera.sensorSize
 import org.koin.androidx.compose.koinViewModel
 
 @Composable

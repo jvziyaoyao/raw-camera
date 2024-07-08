@@ -12,21 +12,21 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.geometry.Rect
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.jvziyaoyao.camera.raw.holder.camera.CameraFlow
-import com.jvziyaoyao.camera.raw.holder.camera.OutputMode
-import com.jvziyaoyao.camera.raw.holder.camera.chooseDefaultCameraPair
-import com.jvziyaoyao.camera.raw.holder.camera.filter.defaultImageFilterList
-import com.jvziyaoyao.camera.raw.holder.camera.isFrontCamera
-import com.jvziyaoyao.camera.raw.holder.camera.off.getGLFilterBitmapAsync
-import com.jvziyaoyao.camera.raw.holder.camera.render.YuvCameraPreviewer
-import com.jvziyaoyao.camera.raw.holder.camera.render.YuvCameraRenderer
-import com.jvziyaoyao.camera.raw.holder.camera.render.getCameraFacingVertex
-import com.jvziyaoyao.camera.raw.holder.camera.render.isEmptyImageFilter
-import com.jvziyaoyao.camera.raw.holder.camera.resizeMat
-import com.jvziyaoyao.camera.raw.holder.camera.toMat
-import com.jvziyaoyao.camera.raw.holder.sensor.SensorFlow
-import com.jvziyaoyao.camera.raw.util.ContextUtil
-import com.jvziyaoyao.camera.raw.util.saveBitmapWithExif
+import com.jvziyaoyao.camera.flow.holder.camera.CameraFlow
+import com.jvziyaoyao.camera.flow.holder.camera.OutputMode
+import com.jvziyaoyao.camera.flow.holder.camera.chooseDefaultCameraPair
+import com.jvziyaoyao.camera.flow.holder.camera.filter.defaultImageFilterList
+import com.jvziyaoyao.camera.flow.holder.camera.isFrontCamera
+import com.jvziyaoyao.camera.flow.holder.camera.off.getGLFilterBitmapAsync
+import com.jvziyaoyao.camera.flow.holder.camera.render.YuvCameraPreviewer
+import com.jvziyaoyao.camera.flow.holder.camera.render.YuvCameraRenderer
+import com.jvziyaoyao.camera.flow.holder.camera.render.getCameraFacingVertex
+import com.jvziyaoyao.camera.flow.holder.camera.render.isEmptyImageFilter
+import com.jvziyaoyao.camera.flow.holder.camera.resizeMat
+import com.jvziyaoyao.camera.flow.holder.camera.toMat
+import com.jvziyaoyao.camera.flow.holder.sensor.SensorFlow
+import com.jvziyaoyao.camera.flow.util.ContextUtil
+import com.jvziyaoyao.camera.flow.util.saveBitmapWithExif
 import com.jvziyaoyao.raw.camera.domain.model.MediaQueryEntity
 import com.jvziyaoyao.raw.camera.domain.repository.ImageRepo
 import kotlinx.coroutines.Dispatchers
@@ -410,9 +410,15 @@ class CameraViewModel(
             }
         } else {
             val nextCameraPair = if (cameraCharacteristics.isFrontCamera) {
-                chooseDefaultCameraPair(cameraPairList, CameraMetadata.LENS_FACING_BACK)
+                chooseDefaultCameraPair(
+                    cameraPairList,
+                    CameraMetadata.LENS_FACING_BACK
+                )
             } else {
-                chooseDefaultCameraPair(cameraPairList, CameraMetadata.LENS_FACING_FRONT)
+                chooseDefaultCameraPair(
+                    cameraPairList,
+                    CameraMetadata.LENS_FACING_FRONT
+                )
             }
             if (nextCameraPair != null) {
                 currentCameraPairFlow.value = nextCameraPair

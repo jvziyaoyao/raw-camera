@@ -31,9 +31,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import com.jvziyaoyao.camera.raw.holder.camera.filter.ImageFilterRenderer
-import com.jvziyaoyao.camera.raw.holder.camera.render.TEX_VERTEX_MAT_90
-import com.jvziyaoyao.camera.raw.holder.camera.render.isEmptyImageFilter
+import com.jvziyaoyao.camera.flow.holder.camera.filter.ImageFilterRenderer
+import com.jvziyaoyao.camera.flow.holder.camera.render.TEX_VERTEX_MAT_90
+import com.jvziyaoyao.camera.flow.holder.camera.render.isEmptyImageFilter
 import com.jvziyaoyao.raw.camera.ui.theme.Layout
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest

@@ -22,7 +22,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.jvziyaoyao.camera.raw.holder.camera.zoomRatioRange
+import com.jvziyaoyao.camera.flow.holder.camera.zoomRatioRange
 import com.jvziyaoyao.raw.camera.base.FadeAnimatedVisibility
 import com.jvziyaoyao.raw.camera.base.ScaleAnimatedVisibility
 import com.jvziyaoyao.raw.camera.page.wheel.CircleWheelState

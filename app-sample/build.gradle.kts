@@ -51,7 +51,7 @@ android {
 
 dependencies {
 
-    implementation(project(":lib-raw"))
+    implementation(project(":camera-flow"))
     implementation("org.opencv:opencv:4.9.0")
     implementation("androidx.exifinterface:exifinterface:1.3.7")
 

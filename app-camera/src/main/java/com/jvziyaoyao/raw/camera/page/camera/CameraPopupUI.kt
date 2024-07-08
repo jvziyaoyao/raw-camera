@@ -28,17 +28,15 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
-import com.jvziyaoyao.camera.raw.holder.camera.outputSupportedMode
+import com.jvziyaoyao.camera.flow.holder.camera.outputSupportedMode
 import com.jvziyaoyao.raw.camera.base.FlatActionSheet
 import com.jvziyaoyao.raw.camera.base.LocalPopupState
 import com.jvziyaoyao.raw.camera.ui.theme.Layout
-import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 
 @Composable

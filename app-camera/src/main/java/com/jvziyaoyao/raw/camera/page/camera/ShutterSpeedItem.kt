@@ -1,6 +1,6 @@
 package com.jvziyaoyao.raw.camera.page.camera
 
-import com.jvziyaoyao.camera.raw.holder.camera.ONE_SECOND
+import com.jvziyaoyao.camera.flow.holder.camera.ONE_SECOND
 
 /**
  * 1/8000

@@ -50,7 +50,7 @@ android {
 }
 
 dependencies {
-    implementation(project(":lib-raw"))
+    implementation(project(":camera-flow"))
 
 //    implementation("com.github.jvziyaoyao:ImageViewer:feat-zoomable-SNAPSHOT")
 //    implementation("com.jvziyaoyao.scale:image-viewer:1.1.0-alpha.4")

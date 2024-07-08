@@ -12,8 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
-import com.jvziyaoyao.camera.raw.holder.camera.toBitmap
-import com.jvziyaoyao.camera.raw.holder.camera.toMat
+import com.jvziyaoyao.camera.flow.holder.camera.toMat
 import com.jvziyaoyao.raw.sample.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

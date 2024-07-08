@@ -6,7 +6,7 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import androidx.compose.runtime.compositionLocalOf
-import com.jvziyaoyao.camera.raw.util.ContextUtil
+import com.jvziyaoyao.camera.flow.util.ContextUtil
 
 val LocalVibratorHelper =
     compositionLocalOf { VibratorHelper(ContextUtil.getApplicationByReflect()) }
