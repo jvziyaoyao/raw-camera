@@ -32,9 +32,17 @@
 
 🧐 预览
 --------
-| ![](doc/image/camera_filter.jpg) | ![](doc/image/focus_peeking.jpg) | ![](doc/image/brightness_peeking.jpg) | ![](doc/image/manual_mode.jpg)    |
+<!-- | ![](doc/image/camera_filter.jpg) | ![](doc/image/focus_peeking.jpg) | ![](doc/image/brightness_peeking.jpg) | ![](doc/image/manual_mode.jpg)    |
 |----------------------------------|----------------------------------|---------------------------------------|-----------------------------------|
-| Photo Filter                     | Focus Peaking                    | Brightness Peaking                    | Manual mode                       |
+| Photo Filter                     | Focus Peaking                    | Brightness Peaking                    | Manual mode                       | -->
+
+
+| <img src="doc/image/camera_filter.jpg" height="355" width="160"/> | <img src="doc/image/focus_peeking.jpg" height="355" width="160"/> | <img src="doc/image/brightness_peeking.jpg" height="355" width="160"/> | <img src="doc/image/manual_mode.jpg" height="355" width="160"/> |
+|:-----:|:-----:|:-----:|:-----:|
+| Photo Filter | Focus Peaking | Brightness Peaking  | Manual mode |
+
+<!-- <img src="doc/image/brightness_peeking.jpg" height="444" width="200"/> -->
+<!-- <img src="doc/image/manual_mode.jpg" height="444" width="200"/> -->
 
 
 🕵️‍♀️ 开源许可
