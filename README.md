@@ -1,3 +1,5 @@
+<img src="doc/image/logo.svg" height="80" width="80"/>
+
 # RawCamera
 
 📷 An universal professional camera.

@@ -48,26 +48,14 @@
             android:label="Wheel"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.RawCamera"
-            tools:ignore="LockedOrientationActivity">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
+            tools:ignore="LockedOrientationActivity" />
         <activity
             android:name=".page.image.ImageActivity"
             android:exported="true"
             android:label="Image"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.RawCamera"
-            tools:ignore="LockedOrientationActivity" >
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
+            tools:ignore="LockedOrientationActivity" />
 
         <provider
             android:name="androidx.core.content.FileProvider"
