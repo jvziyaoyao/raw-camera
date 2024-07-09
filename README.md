@@ -4,15 +4,19 @@
 
 📷 An universal professional camera.
 
-一款基于`Camera2`开发的通用的专业相机
+🌠 一款基于`Camera2`开发的通用的专业相机。
 
-#### 📝 图片浏览组件 👉 [SCALE](https://github.com/jvziyaoyao/scale)
+#### 📦 下载地址 👉 [RELEASE](https://github.com/jvziyaoyao/raw-camera/releases)
+
+#### 📝 更新日志 👉 [CHANGELOG](/CHANGELOG.md)
+
+#### 🌁 图片浏览组件 👉 [SCALE](https://github.com/jvziyaoyao/scale)
 
 #### 👨‍💻 产品与开源 👉 [JVZIYAOYAO](https://www.jvziyaoyao.com)
 
 <br/>
 
-👌 实现
+👌 功能
 --------
 | Function           | Supported |
 |:-------------------|:---------:|
