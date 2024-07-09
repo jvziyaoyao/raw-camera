@@ -18,6 +18,14 @@ android {
         versionCode = 1
         versionName = "1.0.1-alpha.1"
 
+        ndk {
+            abiFilters += listOf(
+//                "armeabi-v7a",
+                "arm64-v8a",
+//                "x86", "x86_64"
+            )
+        }
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true
@@ -26,7 +34,7 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

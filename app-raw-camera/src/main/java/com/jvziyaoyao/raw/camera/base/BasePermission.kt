@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -79,7 +80,11 @@ fun CommonPermissionNotGranted(
     launchPermissionRequest: () -> Unit,
     goSetting: () -> Unit,
 ) {
-    Column(Modifier.fillMaxSize()) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
         Spacer(modifier = Modifier.statusBarsPadding())
 
         Column(
@@ -95,7 +100,7 @@ fun CommonPermissionNotGranted(
             Button(onClick = {
                 launchPermissionRequest()
             }) {
-                Text(text = "🛸 授予权限", color = MaterialTheme.colorScheme.surface)
+                Text(text = "🛸 授予权限", color = MaterialTheme.colorScheme.onPrimary)
             }
             Spacer(modifier = Modifier.height(60.dp))
             Text(
@@ -110,7 +115,7 @@ fun CommonPermissionNotGranted(
                     goSetting()
                 },
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.background
+                    containerColor = MaterialTheme.colorScheme.surface
                 )
             ) {
                 Text(text = "🚑 前往设置", color = MaterialTheme.colorScheme.primary)
