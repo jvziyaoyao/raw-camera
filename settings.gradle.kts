@@ -15,7 +15,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "RawCamera"
+rootProject.name = "raw-camera"
+include(":app-raw-camera")
 include(":camera-flow")
-include(":app-sample")
-include(":app-camera")
+include(":camera-flow-sample")

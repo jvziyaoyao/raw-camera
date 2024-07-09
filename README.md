@@ -4,7 +4,7 @@
 
 一款基于`Camera2`开发的通用的专业相机
 
-#### 📝 图片浏览组件 👉 [Scale](https://github.com/jvziyaoyao/scale)
+#### 📝 图片浏览组件 👉 [SCALE](https://github.com/jvziyaoyao/scale)
 
 #### 👨‍💻 产品与开源 👉 [JVZIYAOYAO](https://www.jvziyaoyao.com)
 
@@ -12,22 +12,23 @@
 
 👌 实现
 --------
-| Function                  | Supported |
-|:--------------------------|:---------:|
-| RAW                       |     ✅     |
-| HEIF                      |     ✅     |
-| Manual mode               |     ✅     |
-| Flash light               |     ✅     |
-| Photo Filter              |     ✅     |
-| Focus Peaking             |     ✅     |
-| Brightness Peaking        |     ✅     |
-| Histogram                 |     ✅     |
-| Image preview             |     ✅     |
-| HDR                       |     ⛔     |
-| Beauty                    |     ⛔     |
-| Recording                 |     ⛔     |
-| Ultra wide                |     ⛔     |
-| High Pixel                |     ⛔️     |
+| Function           | Supported |
+|:-------------------|:---------:|
+| RAW                |     ✅     |
+| HEIF               |     ✅     |
+| Manual mode        |     ✅     |
+| Flash light        |     ✅     |
+| Photo Filter       |     ✅     |
+| Focus Peaking      |     ✅     |
+| Brightness Peaking |     ✅     |
+| Histogram          |     ✅     |
+| Image preview      |     ✅     |
+| Spirit level       |     ✅     |
+| HDR                |     ⛔     |
+| Beauty             |     ⛔     |
+| Recording          |     ⛔     |
+| Ultra wide         |     ⛔     |
+| High Pixel         |     ⛔️     |
 
 
 🧐 预览
