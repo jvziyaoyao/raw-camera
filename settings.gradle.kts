@@ -10,9 +10,12 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        mavenLocal()
+        maven(url = "https://jitpack.io")
     }
 }
 
-rootProject.name = "RawCamera"
-include(":app")
- 
+rootProject.name = "raw-camera"
+include(":app-raw-camera")
+include(":camera-flow")
+include(":camera-flow-sample")
